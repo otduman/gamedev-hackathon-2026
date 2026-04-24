@@ -106,15 +106,15 @@ public class HackathonAssetSetup : EditorWindow
             Undo.RegisterCreatedObjectUndo(esObj, "Create EventSystem");
         }
 
-        // Wire decoration prefabs to HexGridManager
-        GameObject treePrefab = FindModelMultipleNames(new[]{ "tree_single_A", "tree_single_B", "trees_A_medium" });
-        GameObject rockPrefab = FindModelMultipleNames(new[]{ "rock_single_A", "rock_single_B", "rock_single_C" });
+        // Wire decoration prefabs — forests on plains, hills on mountain tiles
+        GameObject treePrefab = FindModelMultipleNames(new[]{ "trees_A_medium", "trees_B_medium", "tree_single_A", "tree_single_B" });
+        GameObject hillPrefab = FindModelMultipleNames(new[]{ "hills_A", "hills_B", "hills_C", "hills_A_trees", "hills_B_trees" });
 
         if (treePrefab != null) SetArray(so, "treePrefabs", treePrefab);
-        else Debug.LogWarning("[Setup] No tree decoration model found — plains will have no trees.");
+        else Debug.LogWarning("[Setup] No forest model found — plains will have no trees.");
 
-        if (rockPrefab != null) SetArray(so, "rockPrefabs", rockPrefab);
-        else Debug.LogWarning("[Setup] No rock decoration model found — mountains will have no rocks.");
+        if (hillPrefab != null) SetArray(so, "rockPrefabs", hillPrefab);
+        else Debug.LogWarning("[Setup] No hills model found — mountain tiles will have no decoration.");
 
         so.ApplyModifiedProperties();
 

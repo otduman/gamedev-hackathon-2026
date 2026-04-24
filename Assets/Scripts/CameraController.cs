@@ -3,29 +3,36 @@ using UnityEngine;
 public class CameraController : MonoBehaviour
 {
     [Header("Zoom Settings")]
-    public float minZoom  = 6f;
-    public float maxZoom  = 20f;
-    public float zoomSpeed = 3f;
+    [SerializeField] private float minZoom   = 6f;
+    [SerializeField] private float maxZoom   = 20f;
+    [SerializeField] private float zoomSpeed = 3f;
 
     [Header("Angles (degrees from horizontal)")]
-    public float topDownAngle   = 80f;
-    public float isometricAngle = 45f;
+    [SerializeField] private float topDownAngle   = 80f;
+    [SerializeField] private float isometricAngle = 45f;
 
     [Header("Pan Settings")]
-    public float panSpeed   = 12f;
-    public Vector2 panLimit = new Vector2(25f, 25f);
+    [SerializeField] private float   panSpeed = 12f;
+    [SerializeField] private Vector2 panLimit = new Vector2(25f, 25f);
 
     private Vector3 _targetPosition = Vector3.zero;
     private float   _currentZoom;
 
     private void Awake()
     {
-        // Force sane zoom range — guards against stale Inspector-serialized values
-        // overriding the code defaults (public fields get serialized into the scene).
-        if (maxZoom < minZoom + 5f) maxZoom = minZoom + 14f;
+        // Hard-clamp zoom range — prevents stale serialized values from breaking the camera.
+        minZoom = Mathf.Clamp(minZoom, 4f, 12f);
+        maxZoom = Mathf.Clamp(maxZoom, minZoom + 10f, 40f);
 
         // Always start fully zoomed out so the whole board is visible.
         _currentZoom = maxZoom;
+        Debug.Log($"[CameraController] Awake: zoom={_currentZoom:F1}  min={minZoom}  max={maxZoom}");
+    }
+
+    private void OnValidate()
+    {
+        minZoom = Mathf.Max(minZoom, 2f);
+        if (maxZoom < minZoom + 5f) maxZoom = minZoom + 14f;
     }
 
     private void Start()
