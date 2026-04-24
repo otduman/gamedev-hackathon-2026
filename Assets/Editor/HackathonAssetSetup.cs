@@ -106,6 +106,18 @@ public class HackathonAssetSetup : EditorWindow
             Undo.RegisterCreatedObjectUndo(esObj, "Create EventSystem");
         }
 
+        // Wire decoration prefabs to HexGridManager
+        GameObject treePrefab = FindModelMultipleNames(new[]{ "tree_single_A", "tree_single_B", "trees_A_medium" });
+        GameObject rockPrefab = FindModelMultipleNames(new[]{ "rock_single_A", "rock_single_B", "rock_single_C" });
+
+        if (treePrefab != null) SetArray(so, "treePrefabs", treePrefab);
+        else Debug.LogWarning("[Setup] No tree decoration model found — plains will have no trees.");
+
+        if (rockPrefab != null) SetArray(so, "rockPrefabs", rockPrefab);
+        else Debug.LogWarning("[Setup] No rock decoration model found — mountains will have no rocks.");
+
+        so.ApplyModifiedProperties();
+
         AssetDatabase.SaveAssets();
         EditorUtility.SetDirty(gridManager);
         // Save the scene so prefab assignments on HexGridManager persist across Play.
@@ -157,10 +169,14 @@ public class HackathonAssetSetup : EditorWindow
         string path = $"Assets/Prefabs/{prefabName}.prefab";
         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
 
+        // CapsuleCollider instead of convex MeshCollider — avoids hull overlap between
+        // adjacent tiles and works correctly for raycast click detection.
         if (instance.GetComponent<Collider>() == null)
         {
-            MeshCollider col = instance.AddComponent<MeshCollider>();
-            col.convex = true;
+            CapsuleCollider col = instance.AddComponent<CapsuleCollider>();
+            col.center = new Vector3(0f, 0.1f, 0f);
+            col.radius = 0.5f;
+            col.height = 0.35f;
         }
 
         Tile tile = instance.GetComponent<Tile>() ?? instance.AddComponent<Tile>();

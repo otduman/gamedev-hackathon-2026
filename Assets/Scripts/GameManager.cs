@@ -162,7 +162,7 @@ public class GameManager : MonoBehaviour
         _cubesLeftToPlace = Mathf.Max(3, owned / 3);
 
         if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage($"Place {_cubesLeftToPlace} cube(s) on your tiles.");
+            UIManager.Instance.ShowMessage($"Place {_cubesLeftToPlace} warrior(s) on your tiles.");
 
         // If the player somehow owns no tiles (edge case), skip straight to Action.
         if (_cubesLeftToPlace == 0)
@@ -178,8 +178,8 @@ public class GameManager : MonoBehaviour
         _cubesLeftToPlace--;
 
         string msg = _cubesLeftToPlace > 0
-            ? $"Place {_cubesLeftToPlace} more cube(s)."
-            : "All cubes placed!";
+            ? $"Place {_cubesLeftToPlace} more warrior(s)."
+            : "All warriors placed!";
 
         if (UIManager.Instance != null)
             UIManager.Instance.ShowMessage(msg);
@@ -354,7 +354,7 @@ public class GameManager : MonoBehaviour
             _migrationUsed = true;
 
             if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage($"Moved {moveCount} cube(s). Press End Turn.");
+                UIManager.Instance.ShowMessage($"Moved {moveCount} warrior(s). Press End Turn.");
 
             // Auto-end the turn after the single migration move.
             EndTurn();

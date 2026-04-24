@@ -12,6 +12,10 @@ public class HexGridManager : MonoBehaviour
     [SerializeField] private GameObject[] waterPrefabs;
     [SerializeField] private GameObject[] pasturePrefabs;
 
+    [Header("Decoration Prefabs")]
+    [SerializeField] private GameObject[] treePrefabs;
+    [SerializeField] private GameObject[] rockPrefabs;
+
     [Header("Grid Settings")]
     [SerializeField] private int mapRadius = 3;
     [SerializeField] private float hexSize = 1.0f;
@@ -94,8 +98,50 @@ public class HexGridManager : MonoBehaviour
             yurtCandidates.RemoveAt(idx);
         }
 
+        PlaceDecorations();
+
         Debug.Log($"[HexGridManager] Grid generated: {Grid.Count} tiles. Fallback mode: {_usingFallback}");
         OnGridReady?.Invoke();
+    }
+
+    private void PlaceDecorations()
+    {
+        foreach (Tile tile in Grid.Values)
+        {
+            // Skip yurt tiles and tiles that already have occupants
+            if (tile.HasYurt) continue;
+
+            GameObject[] pool = null;
+            float chance = 0f;
+
+            switch (tile.Terrain)
+            {
+                case TerrainType.Plain:
+                case TerrainType.Pasture:
+                    pool = treePrefabs;
+                    chance = 0.25f;
+                    break;
+                case TerrainType.Mountain:
+                    pool = rockPrefabs;
+                    chance = 0.55f;
+                    break;
+                case TerrainType.Water:
+                    continue; // no decorations on water
+            }
+
+            if (pool == null || pool.Length == 0) continue;
+            if (Random.value > chance) continue;
+
+            GameObject prefab = pool[Random.Range(0, pool.Length)];
+            GameObject deco = Instantiate(prefab, tile.transform);
+            deco.transform.localPosition = new Vector3(
+                Random.Range(-0.2f, 0.2f), 0f, Random.Range(-0.2f, 0.2f));
+            deco.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+
+            // Remove any colliders on decorations so they don't block tile clicks
+            foreach (Collider c in deco.GetComponentsInChildren<Collider>())
+                Destroy(c);
+        }
     }
 
     private GameObject CreateFallbackTile(Vector3 worldPos, TerrainType terrain)
