@@ -110,6 +110,7 @@ public class GameManager : MonoBehaviour
         foreach (Tile tile in candidates)
         {
             if (assigned >= count) break;
+            if (tile.Terrain == TerrainType.Water) continue;
             tile.OwnerPlayerId = playerId;
             tile.AddCubes(cubesPerTile);
             tile.UpdateVisuals();

@@ -35,8 +35,9 @@ public class Tile : MonoBehaviour
     private static readonly Color _player1Tint  = new Color(1.00f, 0.35f, 0.35f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
-    private const float YurtScale    = 0.15f;
-    private const float WarriorScale = 0.35f;
+    private const float YurtScale       = 1.0f;
+    private const float WarriorScale    = 0.35f;
+    private const float WarriorYOffset  = -0.15f; // brings feet flush with tile surface
     private const int   MaxShownWarriors = 5;
 
     // Formation positions (local XZ, Y=0) for 1-5 warriors on a KayKit hex tile.
@@ -116,7 +117,7 @@ public class Tile : MonoBehaviour
             if (w != null) Destroy(w);
         _activeWarriors.Clear();
 
-        if (CubeCount <= 0)
+        if (CubeCount <= 0 || Terrain == TerrainType.Water)
         {
             HideCountLabel();
             return;
@@ -144,7 +145,7 @@ public class Tile : MonoBehaviour
         if (warriorPrefab != null)
         {
             warrior = Instantiate(warriorPrefab, transform);
-            warrior.transform.localPosition = localPos;
+            warrior.transform.localPosition = localPos + new Vector3(0f, WarriorYOffset, 0f);
             warrior.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             warrior.transform.localScale    = Vector3.one * WarriorScale;
 

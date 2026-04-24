@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &2209316641112663982
+--- !u!1 &6216380364505834267
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 386002539149825708}
-  - component: {fileID: 8222883317186107765}
-  - component: {fileID: 3567931445393162196}
+  - component: {fileID: 8470602194450052236}
+  - component: {fileID: 8054009237234527714}
+  - component: {fileID: 3061989551123377169}
   m_Layer: 0
   m_Name: CubeCountText
   m_TagString: Untagged
@@ -18,32 +18,32 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 0
---- !u!224 &386002539149825708
+--- !u!224 &8470602194450052236
 RectTransform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2209316641112663982}
+  m_GameObject: {fileID: 6216380364505834267}
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 7527159439100621580}
+  m_Father: {fileID: 5193532200750789567}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 1.5}
   m_SizeDelta: {x: 20, y: 5}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!23 &8222883317186107765
+--- !u!23 &8054009237234527714
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2209316641112663982}
+  m_GameObject: {fileID: 6216380364505834267}
   m_Enabled: 1
   m_CastShadows: 0
   m_ReceiveShadows: 0
@@ -86,13 +86,13 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &3567931445393162196
+--- !u!114 &3061989551123377169
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2209316641112663982}
+  m_GameObject: {fileID: 6216380364505834267}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9541d86e2fd84c1d9990edf0852d74ab, type: 3}
@@ -179,9 +179,9 @@ MonoBehaviour:
   _SortingLayerID: 0
   _SortingOrder: 0
   m_hasFontAssetChanged: 0
-  m_renderer: {fileID: 8222883317186107765}
+  m_renderer: {fileID: 8054009237234527714}
   m_maskType: 0
---- !u!1001 &8070290950220371175
+--- !u!1001 &5735786541707482196
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -238,27 +238,27 @@ PrefabInstance:
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 386002539149825708}
+      addedObject: {fileID: 8470602194450052236}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 7665132321157260874}
+      addedObject: {fileID: 7931238589875054031}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 7191805044118434703}
+      addedObject: {fileID: 4744656832384658102}
   m_SourcePrefab: {fileID: 100100000, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
---- !u!1 &7151161013107321270 stripped
+--- !u!1 &4852895409275529477 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
-  m_PrefabInstance: {fileID: 8070290950220371175}
+  m_PrefabInstance: {fileID: 5735786541707482196}
   m_PrefabAsset: {fileID: 0}
---- !u!64 &7665132321157260874
-MeshCollider:
+--- !u!136 &7931238589875054031
+CapsuleCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7151161013107321270}
+  m_GameObject: {fileID: 4852895409275529477}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -270,32 +270,34 @@ MeshCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 1
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 1477051960566787356, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
---- !u!114 &7191805044118434703
+  serializedVersion: 2
+  m_Radius: 0.5
+  m_Height: 0.35
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.1, z: 0}
+--- !u!114 &4744656832384658102
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7151161013107321270}
+  m_GameObject: {fileID: 4852895409275529477}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6280889422cbbcb44b9cc92e9c0b05a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Tile
-  yurtPrefab: {fileID: 6211410997519181094, guid: 952cfa24845c3b444aeae337d37852dc, type: 3}
-  meshRenderer: {fileID: 8664639250539333731}
-  cubeCountText: {fileID: 3567931445393162196}
---- !u!4 &7527159439100621580 stripped
+  yurtPrefab: {fileID: 7995117132148315931, guid: 952cfa24845c3b444aeae337d37852dc, type: 3}
+  warriorPrefab: {fileID: 787542649501933166, guid: 9668c15f07b16a64d9d02955659a4ae6, type: 3}
+  meshRenderer: {fileID: 6365854400863422672}
+  cubeCountText: {fileID: 3061989551123377169}
+--- !u!4 &5193532200750789567 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
-  m_PrefabInstance: {fileID: 8070290950220371175}
+  m_PrefabInstance: {fileID: 5735786541707482196}
   m_PrefabAsset: {fileID: 0}
---- !u!23 &8664639250539333731 stripped
+--- !u!23 &6365854400863422672 stripped
 MeshRenderer:
   m_CorrespondingSourceObject: {fileID: -7511558181221131132, guid: 9fb169b0d6094784193d1d854502b259, type: 3}
-  m_PrefabInstance: {fileID: 8070290950220371175}
+  m_PrefabInstance: {fileID: 5735786541707482196}
   m_PrefabAsset: {fileID: 0}
