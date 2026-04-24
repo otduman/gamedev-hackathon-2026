@@ -9,6 +9,12 @@ public class HackathonAssetSetup : EditorWindow
     [MenuItem("Hackathon/Auto-Setup Assets")]
     public static void SetupAssets()
     {
+        if (EditorApplication.isPlaying)
+        {
+            Debug.LogError("[Setup] Stop Play mode before running Auto-Setup.");
+            return;
+        }
+
         if (!AssetDatabase.IsValidFolder("Assets/Prefabs"))
             AssetDatabase.CreateFolder("Assets", "Prefabs");
 
