@@ -14,7 +14,7 @@ public class HexGridManager : MonoBehaviour
 
     [Header("Grid Settings")]
     [SerializeField] private int mapRadius = 3;
-    [SerializeField] private float hexSize = 1.5f;
+    [SerializeField] private float hexSize = 1.0f;
 
     public Dictionary<Vector2Int, Tile> Grid { get; private set; } = new Dictionary<Vector2Int, Tile>();
 

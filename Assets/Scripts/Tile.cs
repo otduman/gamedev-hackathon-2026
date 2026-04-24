@@ -30,9 +30,9 @@ public class Tile : MonoBehaviour
     private static readonly Color _player1Tint  = new Color(1.00f, 0.35f, 0.35f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
-    // How large the yurt should appear in world units (diameter).
-    // At hexSize=1.5 the tile face is ~1.4 units wide; 0.65 fills ~45% — readable but not cramped.
-    private const float YurtTargetSize = 0.65f;
+    // Target yurt diameter in world units. KayKit tiles at hexSize=1 are ~1.73 units wide;
+    // 0.85 fills roughly half the tile face — visible but not overwhelming.
+    private const float YurtTargetSize = 0.85f;
 
     public void Initialize(Vector2Int coords, TerrainType terrain)
     {
@@ -90,7 +90,8 @@ public class Tile : MonoBehaviour
             if (yurtPrefab != null)
             {
                 _activeYurtInstance = Instantiate(yurtPrefab, transform);
-                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0.3f, 0f);
+                // y=0: KayKit tile pivots are at the bottom of the mesh, surface is at y=0.
+                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0f, 0f);
                 _activeYurtInstance.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                 // Auto-scale so the yurt fits the tile regardless of the source model's native size.
                 StartCoroutine(AutoScaleYurt(_activeYurtInstance));
@@ -117,11 +118,28 @@ public class Tile : MonoBehaviour
 
     // Waits one frame after spawn so all child Renderers have initialised their bounds,
     // then uniformly scales the yurt to YurtTargetSize world units.
+    // Also disables duplicate top-level mesh objects that some FBX exports include.
     private IEnumerator AutoScaleYurt(GameObject yurtGo)
     {
         yield return null;
-
         if (yurtGo == null) yield break;
+
+        // Some FBX files contain the same mesh duplicated at the root level.
+        // Keep only the first child that has renderers; disable the rest.
+        if (yurtGo.transform.childCount > 1)
+        {
+            bool keptOne = false;
+            for (int i = 0; i < yurtGo.transform.childCount; i++)
+            {
+                Transform child = yurtGo.transform.GetChild(i);
+                bool hasRenderers = child.GetComponentInChildren<Renderer>() != null;
+                if (hasRenderers)
+                {
+                    if (!keptOne) keptOne = true;
+                    else child.gameObject.SetActive(false);
+                }
+            }
+        }
 
         Renderer[] renderers = yurtGo.GetComponentsInChildren<Renderer>();
         if (renderers.Length == 0) yield break;
@@ -129,7 +147,6 @@ public class Tile : MonoBehaviour
         Bounds bounds = renderers[0].bounds;
         foreach (Renderer r in renderers) bounds.Encapsulate(r.bounds);
 
-        // Use the horizontal footprint (XZ) — we don't want to shrink a tall model just because it's tall.
         float maxHorizontal = Mathf.Max(bounds.size.x, bounds.size.z);
         if (maxHorizontal < 0.001f) yield break;
 

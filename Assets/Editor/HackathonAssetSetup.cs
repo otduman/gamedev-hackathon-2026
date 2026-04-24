@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -101,6 +102,8 @@ public class HackathonAssetSetup : EditorWindow
 
         AssetDatabase.SaveAssets();
         EditorUtility.SetDirty(gridManager);
+        // Save the scene so prefab assignments on HexGridManager persist across Play.
+        EditorSceneManager.SaveOpenScenes();
         Debug.Log("<color=cyan>[Setup] Complete! Press Play to test.</color>");
     }
 
