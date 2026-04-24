@@ -3,8 +3,8 @@ using UnityEngine;
 public class CameraController : MonoBehaviour
 {
     [Header("Zoom Settings")]
-    [SerializeField] private float minZoom   = 6f;
-    [SerializeField] private float maxZoom   = 20f;
+    [SerializeField] private float minZoom   = 5f;
+    [SerializeField] private float maxZoom   = 14f;
     [SerializeField] private float zoomSpeed = 3f;
 
     [Header("Angles (degrees from horizontal)")]
@@ -21,8 +21,8 @@ public class CameraController : MonoBehaviour
     private void Awake()
     {
         // Hard-clamp zoom range — prevents stale serialized values from breaking the camera.
-        minZoom = Mathf.Clamp(minZoom, 4f, 12f);
-        maxZoom = Mathf.Clamp(maxZoom, minZoom + 10f, 40f);
+        minZoom = Mathf.Clamp(minZoom, 3f, 10f);
+        maxZoom = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
 
         // Always start fully zoomed out so the whole board is visible.
         _currentZoom = maxZoom;
@@ -32,7 +32,7 @@ public class CameraController : MonoBehaviour
     private void OnValidate()
     {
         minZoom = Mathf.Max(minZoom, 2f);
-        if (maxZoom < minZoom + 5f) maxZoom = minZoom + 14f;
+        if (maxZoom < minZoom + 5f) maxZoom = minZoom + 9f;
     }
 
     private void Start()
@@ -45,7 +45,7 @@ public class CameraController : MonoBehaviour
         }
 
         if (HexGridManager.Instance != null)
-            HexGridManager.Instance.OnGridReady += CenterOnGrid;
+            HexGridManager.Instance.OnGridReady += FitToGrid;
 
         CenterOnGrid();
     }
@@ -53,7 +53,7 @@ public class CameraController : MonoBehaviour
     private void OnDestroy()
     {
         if (HexGridManager.Instance != null)
-            HexGridManager.Instance.OnGridReady -= CenterOnGrid;
+            HexGridManager.Instance.OnGridReady -= FitToGrid;
     }
 
     private void Update()
@@ -107,5 +107,50 @@ public class CameraController : MonoBehaviour
     {
         _targetPosition = Vector3.zero;
         UpdateCameraTransform();
+    }
+
+    // Called once after the grid is generated. Computes the exact zoom needed to fit
+    // every tile inside the viewport with no background showing.
+    private void FitToGrid()
+    {
+        if (HexGridManager.Instance == null || HexGridManager.Instance.Grid.Count == 0) return;
+
+        Camera cam = GetComponent<Camera>();
+        if (cam == null) return;
+
+        // Find the world-space bounding box of all tile centres.
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minZ = float.MaxValue, maxZ = float.MinValue;
+
+        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
+        {
+            Vector3 p = tile.transform.position;
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.z < minZ) minZ = p.z;
+            if (p.z > maxZ) maxZ = p.z;
+        }
+
+        // Add half a tile width of padding so edge tiles aren't clipped.
+        const float tilePadding = 1.1f;
+        float halfW = (maxX - minX) * 0.5f + tilePadding;
+        float halfH = (maxZ - minZ) * 0.5f + tilePadding;
+
+        // Centre the look-at point on the grid (should be ~0,0,0 for a symmetric grid).
+        _targetPosition = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
+
+        // At near-top-down angles the ground plane is ~perpendicular to the view ray.
+        // Visible half-extents ≈ zoom * tan(fov/2) vertically, * aspect horizontally.
+        float tanHalfFov = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float zoomForH   = halfH / tanHalfFov;
+        float zoomForW   = halfW / (tanHalfFov * cam.aspect);
+
+        // maxZoom is expanded to whatever the grid needs; minZoom stays as the closest scroll limit.
+        float needed = Mathf.Max(zoomForH, zoomForW);
+        maxZoom      = needed * 1.05f;          // 5 % breathing room
+        _currentZoom = maxZoom;
+
+        UpdateCameraTransform();
+        Debug.Log($"[CameraController] FitToGrid: zoom={_currentZoom:F2}  halfW={halfW:F2}  halfH={halfH:F2}");
     }
 }

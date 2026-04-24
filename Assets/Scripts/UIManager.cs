@@ -38,13 +38,15 @@ public class UIManager : MonoBehaviour
     // Lifecycle
     // -------------------------------------------------------------------------
 
+    [SerializeField] private bool hudEnabled = false;
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
         EnsureCanvasComponents();
-        BuildHUD();
+        if (hudEnabled) BuildHUD();
     }
 
     // Make sure the GameObject this is on has the required Canvas plumbing.
