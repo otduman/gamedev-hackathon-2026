@@ -17,6 +17,7 @@ public class CameraController : MonoBehaviour
 
     private Vector3 _targetPosition = Vector3.zero;
     private float   _currentZoom;
+    private float   _lastFitAspect = -1f;
 
     private void Awake()
     {
@@ -60,6 +61,16 @@ public class CameraController : MonoBehaviour
     {
         HandleZoom();
         HandlePan();
+
+        // Re-fit whenever the Game view aspect ratio changes (resolution switch).
+        Camera cam = GetComponent<Camera>();
+        if (cam != null &&
+            HexGridManager.Instance != null &&
+            HexGridManager.Instance.Grid.Count > 0 &&
+            Mathf.Abs(cam.aspect - _lastFitAspect) > 0.005f)
+        {
+            FitToGrid();
+        }
     }
 
     private void HandleZoom()
@@ -150,7 +161,8 @@ public class CameraController : MonoBehaviour
         maxZoom      = needed * 1.05f;          // 5 % breathing room
         _currentZoom = maxZoom;
 
+        _lastFitAspect = cam.aspect;
         UpdateCameraTransform();
-        Debug.Log($"[CameraController] FitToGrid: zoom={_currentZoom:F2}  halfW={halfW:F2}  halfH={halfH:F2}");
+        Debug.Log($"[CameraController] FitToGrid: zoom={_currentZoom:F2}  halfW={halfW:F2}  halfH={halfH:F2}  aspect={cam.aspect:F3}");
     }
 }

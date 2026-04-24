@@ -44,9 +44,29 @@ public class HackathonAssetSetup : EditorWindow
             Debug.LogWarning("[Setup] No yurt model found — yurt tiles will show a gold sphere placeholder. Import a yurt model and re-run setup to fix.");
         }
 
-        GameObject grassPrefab    = CreateTilePrefab(grassModel,    "Tile_Grass",    yurtPrefab);
-        GameObject waterPrefab    = CreateTilePrefab(waterModel,    "Tile_Water",    yurtPrefab);
-        GameObject mountainPrefab = CreateTilePrefab(mountainModel, "Tile_Mountain", yurtPrefab);
+        // Soldier / warrior model — Meshy_AI_biped with Alert (idle) animation.
+        GameObject soldierModel = FindModelMultipleNames(new[]
+        {
+            "Meshy_AI_biped_Animation_Alert_withSkin",
+            "Meshy_AI_biped_Animation_Alert",
+            "Meshy_AI_biped",
+            "soldier", "warrior", "unit"
+        });
+
+        GameObject warriorPrefab2 = null;
+        if (soldierModel != null)
+        {
+            warriorPrefab2 = CreateWarriorPrefab(soldierModel, "WarriorUnit");
+            Debug.Log("[Setup] Warrior prefab created.");
+        }
+        else
+        {
+            Debug.LogWarning("[Setup] No soldier model found — warriors will use capsule fallback.");
+        }
+
+        GameObject grassPrefab    = CreateTilePrefab(grassModel,    "Tile_Grass",    yurtPrefab, warriorPrefab2);
+        GameObject waterPrefab    = CreateTilePrefab(waterModel,    "Tile_Water",    yurtPrefab, warriorPrefab2);
+        GameObject mountainPrefab = CreateTilePrefab(mountainModel, "Tile_Mountain", yurtPrefab, warriorPrefab2);
 
         // Create or find Game Controllers object.
         HexGridManager gridManager = FindAnyObjectByType<HexGridManager>();
@@ -164,7 +184,25 @@ public class HackathonAssetSetup : EditorWindow
         return prefab;
     }
 
-    private static GameObject CreateTilePrefab(GameObject model, string prefabName, GameObject yurtPrefab)
+    private static GameObject CreateWarriorPrefab(GameObject model, string prefabName)
+    {
+        string path = $"Assets/Prefabs/{prefabName}.prefab";
+        GameObject root          = new GameObject(prefabName);
+        GameObject modelInstance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+        modelInstance.transform.SetParent(root.transform, false);
+        modelInstance.transform.localPosition = Vector3.zero;
+        modelInstance.transform.localScale    = Vector3.one;
+
+        // Strip all colliders — warriors must not block tile raycast clicks.
+        foreach (Collider c in root.GetComponentsInChildren<Collider>(true))
+            Object.DestroyImmediate(c);
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+        return prefab;
+    }
+
+    private static GameObject CreateTilePrefab(GameObject model, string prefabName, GameObject yurtPrefab, GameObject warriorPrefab)
     {
         string path = $"Assets/Prefabs/{prefabName}.prefab";
         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
@@ -190,6 +228,9 @@ public class HackathonAssetSetup : EditorWindow
 
         if (yurtPrefab != null)
             tileSo.FindProperty("yurtPrefab").objectReferenceValue = yurtPrefab;
+
+        if (warriorPrefab != null)
+            tileSo.FindProperty("warriorPrefab").objectReferenceValue = warriorPrefab;
 
         // Floating cube-count label (world-space TMP).
         GameObject textObj = new GameObject("CubeCountText");
