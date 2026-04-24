@@ -8,7 +8,7 @@ public class CameraController : MonoBehaviour
     [SerializeField] private float zoomSpeed = 3f;
 
     [Header("Angles (degrees from horizontal)")]
-    [SerializeField] private float topDownAngle   = 80f;
+    [SerializeField] private float topDownAngle   = 72f;
     [SerializeField] private float isometricAngle = 45f;
 
     [Header("Pan Settings")]
@@ -21,9 +21,11 @@ public class CameraController : MonoBehaviour
 
     private void Awake()
     {
-        // Hard-clamp zoom range — prevents stale serialized values from breaking the camera.
-        minZoom = Mathf.Clamp(minZoom, 3f, 10f);
-        maxZoom = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
+        // Hard-clamp zoom and angle — prevents stale serialized values from breaking the camera.
+        minZoom       = Mathf.Clamp(minZoom, 3f, 10f);
+        maxZoom       = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
+        topDownAngle   = 72f;   // civ-style tilt: 72° from horizontal
+        isometricAngle = 45f;
 
         // Always start fully zoomed out so the whole board is visible.
         _currentZoom = maxZoom;
@@ -158,7 +160,7 @@ public class CameraController : MonoBehaviour
 
         // maxZoom is expanded to whatever the grid needs; minZoom stays as the closest scroll limit.
         float needed = Mathf.Max(zoomForH, zoomForW);
-        maxZoom      = needed * 1.05f;          // 5 % breathing room
+        maxZoom      = needed * 1.2f;            // 20% breathing room — accounts for tilted view
         _currentZoom = maxZoom;
 
         _lastFitAspect = cam.aspect;

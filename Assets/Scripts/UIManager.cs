@@ -38,7 +38,7 @@ public class UIManager : MonoBehaviour
     // Lifecycle
     // -------------------------------------------------------------------------
 
-    [SerializeField] private bool hudEnabled = false;
+    [SerializeField] private bool hudEnabled = true;
 
     private void Awake()
     {
