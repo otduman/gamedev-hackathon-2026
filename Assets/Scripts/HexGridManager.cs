@@ -22,8 +22,14 @@ public class HexGridManager : MonoBehaviour
 
     public Dictionary<Vector2Int, Tile> Grid { get; private set; } = new Dictionary<Vector2Int, Tile>();
 
-    private bool _usingFallback = false;
-    public bool UsingFallbackTiles => _usingFallback;
+    private static readonly Vector3[] DecoSpreadOffsets = new Vector3[]
+    {
+        new Vector3( 0.00f, 0f,  0.00f),
+        new Vector3( 0.30f, 0f,  0.15f),
+        new Vector3(-0.30f, 0f,  0.15f),
+        new Vector3( 0.15f, 0f, -0.30f),
+        new Vector3(-0.15f, 0f, -0.30f),
+    };
 
     private static readonly Color FallbackColorPlain    = new Color(0.20f, 0.50f, 0.20f);
     private static readonly Color FallbackColorMountain = new Color(0.50f, 0.50f, 0.50f);
@@ -81,83 +87,205 @@ public class HexGridManager : MonoBehaviour
                     Tile tile = fallbackGo.GetComponent<Tile>();
                     tile.Initialize(hexCoords, terrain);
                     Grid.Add(hexCoords, tile);
-                    _usingFallback = true;
                 }
             }
         }
 
-        List<Tile> yurtCandidates = new List<Tile>();
-        foreach (Tile t in Grid.Values)
-            if (t.Terrain == TerrainType.Plain || t.Terrain == TerrainType.Pasture)
-                yurtCandidates.Add(t);
-
-        for (int i = 0; i < 3 && yurtCandidates.Count > 0; i++)
-        {
-            int idx = Random.Range(0, yurtCandidates.Count);
-            yurtCandidates[idx].SetHasYurt(true);
-            yurtCandidates.RemoveAt(idx);
-        }
-
         PlaceDecorations();
+        AddHexBorders();
+        CreateBackgroundPlane();
 
-        Debug.Log($"[HexGridManager] Grid generated: {Grid.Count} tiles. Fallback mode: {_usingFallback}");
         OnGridReady?.Invoke();
         if (GetComponent<AmbientEnvironment>() == null)
             gameObject.AddComponent<AmbientEnvironment>();
         if (GetComponent<WaterAnimator>() == null)
             gameObject.AddComponent<WaterAnimator>();
+        if (GetComponent<AudioManager>() == null)
+            gameObject.AddComponent<AudioManager>();
     }
 
     private void PlaceDecorations()
     {
         foreach (Tile tile in Grid.Values)
         {
-            // Skip yurt tiles and tiles that already have occupants
             if (tile.HasYurt) continue;
 
-            GameObject[] pool = null;
-            float chance = 0f;
+            GameObject[] primaryPool   = null;
+            GameObject[] secondaryPool = null;
+            int maxCount = 1;
+            float spawnChance = 0f;
 
             switch (tile.Terrain)
             {
                 case TerrainType.Plain:
+                    primaryPool   = treePrefabs;
+                    secondaryPool = rockPrefabs;
+                    maxCount      = 1;
+                    spawnChance   = 0.30f;
+                    break;
                 case TerrainType.Pasture:
-                    pool = treePrefabs;
-                    chance = 0.25f;
+                    primaryPool   = treePrefabs;
+                    secondaryPool = rockPrefabs;
+                    maxCount      = 2;
+                    spawnChance   = 0.40f;
                     break;
                 case TerrainType.Mountain:
-                    pool = rockPrefabs;
-                    chance = 0.55f;
+                    primaryPool   = rockPrefabs;
+                    secondaryPool = rockPrefabs;
+                    maxCount      = 2;
+                    spawnChance   = 0.55f;
                     break;
                 case TerrainType.Water:
-                    continue; // no decorations on water
+                    continue;
             }
 
-            if (pool == null || pool.Length == 0) continue;
-            if (Random.value > chance) continue;
+            if (Random.value > spawnChance) continue;
 
-            GameObject prefab = pool[Random.Range(0, pool.Length)];
-            GameObject deco = Instantiate(prefab, tile.transform);
-            deco.transform.localPosition = new Vector3(
-                Random.Range(-0.2f, 0.2f), 0f, Random.Range(-0.2f, 0.2f));
-            deco.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            // Pick how many decorations (1..maxCount)
+            int count = Random.Range(1, maxCount + 1);
 
-            // Remove colliders so decorations don't block tile clicks.
-            foreach (Collider c in deco.GetComponentsInChildren<Collider>())
-                Destroy(c);
-
-            // Make decorations semi-transparent so warriors on the tile stay visible.
-            foreach (Renderer r in deco.GetComponentsInChildren<Renderer>())
+            // Shuffle offsets so each run gets a different spread
+            List<Vector3> offsets = new List<Vector3>(DecoSpreadOffsets);
+            for (int i = offsets.Count - 1; i > 0; i--)
             {
-                Material mat = new Material(r.sharedMaterial);
-                if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1);
-                if (mat.HasProperty("_ZWrite"))  mat.SetFloat("_ZWrite", 0);
-                mat.renderQueue = 3000;
-                float a = 0.5f;
-                if (mat.HasProperty("_BaseColor")) { Color c = mat.GetColor("_BaseColor"); c.a = a; mat.SetColor("_BaseColor", c); }
-                if (mat.HasProperty("_Color"))     { Color c = mat.GetColor("_Color");     c.a = a; mat.SetColor("_Color", c); }
-                r.material = mat;
+                int j = Random.Range(0, i + 1);
+                Vector3 tmp = offsets[i]; offsets[i] = offsets[j]; offsets[j] = tmp;
             }
+
+            // Pick one pool for the entire tile so trees and rocks never mix on the same hex.
+            bool usePrimary = secondaryPool == null || secondaryPool.Length == 0 || Random.value < 0.6f;
+            GameObject[] tilePool = usePrimary ? primaryPool : secondaryPool;
+            if (tilePool == null || tilePool.Length == 0) continue;
+
+            // Mark tile as forested once, before spawning individual decorations.
+            bool isTileForest = treePrefabs != null && treePrefabs.Length > 0 && tilePool == treePrefabs
+                                && (tile.Terrain == TerrainType.Plain || tile.Terrain == TerrainType.Pasture);
+            if (isTileForest) tile.SetHasForest(true);
+
+            for (int i = 0; i < count; i++)
+            {
+                GameObject[] pool = tilePool;
+
+                if (pool == null || pool.Length == 0) continue;
+
+                GameObject prefab = pool[Random.Range(0, pool.Length)];
+                Vector3 baseOffset = offsets[i % offsets.Count];
+                Vector3 jitter = new Vector3(Random.Range(-0.08f, 0.08f), 0f, Random.Range(-0.08f, 0.08f));
+
+                GameObject deco = Instantiate(prefab, tile.transform);
+                deco.transform.localPosition = baseOffset + jitter;
+                deco.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                deco.transform.localScale    = Vector3.one * Random.Range(0.85f, 1.15f);
+
+                foreach (Collider c in deco.GetComponentsInChildren<Collider>())
+                    Destroy(c);
+
+                MakeDecoTransparent(deco, 0.52f);
+
+                foreach (Renderer r in deco.GetComponentsInChildren<Renderer>())
+                    tile.RegisterDecoRenderer(r);
+            }
+        }
+    }
+
+    private void CreateBackgroundPlane()
+    {
+        string path = Application.dataPath + "/background-image.jpg";
+        if (!System.IO.File.Exists(path))
+        {
+            Debug.LogWarning("[HexGridManager] background-image.jpg not found in Assets/");
+            return;
+        }
+
+        byte[] bytes = System.IO.File.ReadAllBytes(path);
+        Texture2D tex = new Texture2D(2, 2);
+        if (!tex.LoadImage(bytes))
+        {
+            Debug.LogWarning("[HexGridManager] Failed to decode background-image.jpg");
+            return;
+        }
+
+        GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        plane.name = "BackgroundPlane";
+        plane.transform.SetParent(transform, false);
+        plane.transform.position = new Vector3(0f, -0.8f, 0f);
+        plane.transform.rotation = Quaternion.Euler(90f, 0f, 0f); // lie flat
+        plane.transform.localScale = new Vector3(40f, 40f, 1f);
+
+        Destroy(plane.GetComponent<Collider>());
+
+        Renderer r = plane.GetComponent<Renderer>();
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                     ?? Shader.Find("Unlit/Texture")
+                     ?? Shader.Find("Standard");
+        Material mat = new Material(shader);
+        mat.mainTexture = tex;
+        if (mat.HasProperty("_BaseMap"))  mat.SetTexture("_BaseMap",  tex);
+        if (mat.HasProperty("_MainTex"))  mat.SetTexture("_MainTex",  tex);
+        r.material = mat;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+
+    }
+
+    private void AddHexBorders()
+    {
+        // Pointy-top hex corners at 30°, 90°, 150° … (0° offset + 30° shift for KayKit tiles).
+        // Radius slightly inside hexSize so the border sits within the tile edge.
+        const float borderRadius = 0.97f;
+        const float lineWidth    = 0.012f;
+        const float yOffset      = 0.06f;
+
+        Color borderColor = new Color(0.08f, 0.05f, 0.02f, 0.18f);
+
+        Shader urpUnlit     = Shader.Find("Universal Render Pipeline/Unlit");
+        Shader builtinUnlit = Shader.Find("Unlit/Color");
+        Shader chosen       = urpUnlit ?? builtinUnlit;
+
+        foreach (Tile tile in Grid.Values)
+        {
+            GameObject borderGo = new GameObject("HexBorder");
+            borderGo.transform.SetParent(tile.transform, false);
+            borderGo.transform.localPosition = new Vector3(0f, yOffset, 0f);
+
+            LineRenderer lr = borderGo.AddComponent<LineRenderer>();
+            lr.loop             = true;
+            lr.positionCount    = 6;
+            lr.useWorldSpace    = false;
+            lr.startWidth       = lineWidth;
+            lr.endWidth         = lineWidth;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows   = false;
+
+            float r = hexSize * borderRadius;
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = Mathf.Deg2Rad * (60f * i + 30f); // 30° offset: pointy-top to match KayKit tiles
+                lr.SetPosition(i, new Vector3(Mathf.Cos(angle) * r, 0f, Mathf.Sin(angle) * r));
+            }
+
+            if (chosen != null)
+            {
+                Material mat = new Material(chosen);
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", borderColor);
+                if (mat.HasProperty("_Color"))     mat.SetColor("_Color",     borderColor);
+                lr.material = mat;
+            }
+            lr.startColor = lr.endColor = borderColor;
+        }
+    }
+
+    private static void MakeDecoTransparent(GameObject go, float alpha)
+    {
+        foreach (Renderer r in go.GetComponentsInChildren<Renderer>())
+        {
+            Material mat = new Material(r.sharedMaterial);
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1);
+            if (mat.HasProperty("_ZWrite"))  mat.SetFloat("_ZWrite", 0);
+            mat.renderQueue = 3000;
+            if (mat.HasProperty("_BaseColor")) { Color c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c); }
+            if (mat.HasProperty("_Color"))     { Color c = mat.GetColor("_Color");     c.a = alpha; mat.SetColor("_Color", c); }
+            r.material = mat;
         }
     }
 
@@ -211,9 +339,11 @@ public class HexGridManager : MonoBehaviour
 
     private Vector3 CalculateHexPosition(Vector2Int hexCoords)
     {
-        const float gap = 0.96f; // slight gap between tiles to prevent clipping
-        float x = hexSize * gap * Mathf.Sqrt(3f) * (hexCoords.x + hexCoords.y / 2f);
-        float z = hexSize * gap * 1.5f * hexCoords.y;
+        // Multiplier > 1.0 spreads tiles apart from the natural touching distance.
+        // At 1.0 flat-top hex edges meet exactly; 1.06 gives ~5% visible gap.
+        const float spread = 1.06f;
+        float x = hexSize * spread * Mathf.Sqrt(3f) * (hexCoords.x + hexCoords.y / 2f);
+        float z = hexSize * spread * 1.5f * hexCoords.y;
         return new Vector3(x, 0f, z);
     }
 
@@ -227,18 +357,18 @@ public class HexGridManager : MonoBehaviour
         int   dist = HexDistanceFromOrigin(q, r);
         float roll = Random.value;
 
+        // dist 0-2 are always passable so every tile on the map is reachable
+        // (outer ring tiles always border at least one inner-ring passable tile)
         if (dist <= 1)
-            return roll < 0.70f ? TerrainType.Plain : TerrainType.Pasture;
+            return roll < 0.65f ? TerrainType.Plain : TerrainType.Pasture;
 
         if (dist == 2)
-        {
-            if (roll < 0.60f) return TerrainType.Plain;
-            if (roll < 0.80f) return TerrainType.Pasture;
-            return TerrainType.Mountain;
-        }
+            return roll < 0.55f ? TerrainType.Plain : TerrainType.Pasture;
 
-        if (roll < 0.50f) return TerrainType.Plain;
-        if (roll < 0.70f) return TerrainType.Mountain;
+        // Outer ring — allow Mountains and Water for variety
+        if (roll < 0.45f) return TerrainType.Plain;
+        if (roll < 0.65f) return TerrainType.Pasture;
+        if (roll < 0.82f) return TerrainType.Mountain;
         return TerrainType.Water;
     }
 

@@ -79,7 +79,6 @@ public class AmbientEnvironment : MonoBehaviour
 
         ps.Play();
     }
-
     private void SetupLight()
     {
         _sunLight = FindAnyObjectByType<Light>();

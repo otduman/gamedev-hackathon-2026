@@ -8,9 +8,8 @@ public class CameraController : MonoBehaviour
     [SerializeField] private float maxZoom   = 14f;
     [SerializeField] private float zoomSpeed = 3f;
 
-    [Header("Angles (degrees from horizontal)")]
-    [SerializeField] private float topDownAngle   = 72f;
-    [SerializeField] private float isometricAngle = 45f;
+    private float topDownAngle   = 58f;   // civ-style tilt
+    private float isometricAngle = 40f;
 
     [Header("Pan Settings")]
     [SerializeField] private float   panSpeed = 12f;
@@ -22,15 +21,9 @@ public class CameraController : MonoBehaviour
 
     private void Awake()
     {
-        // Hard-clamp zoom and angle — prevents stale serialized values from breaking the camera.
-        minZoom       = Mathf.Clamp(minZoom, 3f, 10f);
-        maxZoom       = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
-        topDownAngle   = 58f;   // civ-style tilt: 58° from horizontal (~32° off vertical)
-        isometricAngle = 40f;
-
-        // Always start fully zoomed out so the whole board is visible.
+        minZoom      = Mathf.Clamp(minZoom, 3f, 10f);
+        maxZoom      = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
         _currentZoom = maxZoom;
-        Debug.Log($"[CameraController] Awake: zoom={_currentZoom:F1}  min={minZoom}  max={maxZoom}");
     }
 
     private void OnValidate()
@@ -170,6 +163,5 @@ public class CameraController : MonoBehaviour
 
         _lastFitAspect = cam.aspect;
         UpdateCameraTransform();
-        Debug.Log($"[CameraController] FitToGrid: zoom={_currentZoom:F2}  halfW={halfW:F2}  halfH={halfH:F2}  aspect={cam.aspect:F3}");
     }
 }

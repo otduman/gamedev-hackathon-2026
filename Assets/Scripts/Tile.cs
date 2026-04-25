@@ -12,6 +12,11 @@ public class Tile : MonoBehaviour
     public int OwnerPlayerId         { get; set; } = -1;
     public int CubeCount             { get; set; } = 0;
     public bool HasYurt              { get; private set; }
+    public bool HasForest            { get; private set; }
+    public bool IsContested          { get; private set; }
+
+    // Cost to enter this tile during migration (forest = 2 movement points, otherwise 1)
+    public int MoveCost => HasForest ? 2 : 1;
 
     [Header("Asset References")]
     [SerializeField] private GameObject  yurtPrefab;
@@ -22,23 +27,27 @@ public class Tile : MonoBehaviour
     private GameObject            _activeYurtInstance;
     private List<GameObject>      _activeWarriors      = new List<GameObject>();
     private int                   _spawnedWarriorCount = -1;
+    private List<Renderer>        _decoRenderers       = new List<Renderer>();
 
     private MaterialPropertyBlock _propBlock;
     private bool                  _isSelected     = false;
     private bool                  _isHighlighted  = false;
+    private bool                  _isHovered      = false;
     private Color                 _highlightColor = Color.white;
     private Color                 _baseColor      = Color.white;
+    private float                 _pulseIntensity = 0f;
+
+    private static readonly Color _hoverTint = new Color(1.05f, 1.05f, 0.95f, 1f);
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
 
-    private static readonly Color _neutralTint  = Color.white;
-    private static readonly Color _player0Tint  = new Color(0.55f, 0.70f, 1.00f, 1f);
-    private static readonly Color _player1Tint  = new Color(1.00f, 0.55f, 0.55f, 1f);
+    private static readonly Color _player0Tint  = new Color(0.25f, 0.55f, 1.00f, 1f);
+    private static readonly Color _player1Tint  = new Color(1.00f, 0.28f, 0.28f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
-    private const float YurtScale        = 1.0f;
-    private const float WarriorScale     = 0.6f;
+    private const float YurtScale        = 1.1f;
+    private const float WarriorScale     = 0.68f;
     private const float WarriorYOffset   = -0.15f;
     private const int   MaxShownWarriors = 5;
 
@@ -71,7 +80,15 @@ public class Tile : MonoBehaviour
     public void AddCubes(int amount)    { CubeCount += amount;                           UpdateVisuals(); }
     public void RemoveCubes(int amount) { CubeCount = Mathf.Max(0, CubeCount - amount);  UpdateVisuals(); }
     public void SetHasYurt(bool value)  { HasYurt = value;   UpdateVisuals(); }
+    public void SetHasForest(bool value) { HasForest = value; }
+    public void SetContested(bool contested) { IsContested = contested; UpdateVisuals(); }
     public void SetSelected(bool sel)   { _isSelected = sel; UpdateVisuals(); }
+
+    public void SetHovered(bool hovered)
+    {
+        _isHovered = hovered;
+        UpdateVisuals();
+    }
 
     public void SetHighlighted(bool highlighted, Color color)
     {
@@ -86,11 +103,33 @@ public class Tile : MonoBehaviour
         UpdateVisuals();
     }
 
+    public void TriggerConquestPulse()
+    {
+        StopCoroutine("PulseCoroutine");
+        StartCoroutine(PulseCoroutine());
+    }
+
+    private IEnumerator PulseCoroutine()
+    {
+        float duration = 0.55f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            _pulseIntensity = Mathf.Sin(elapsed / duration * Mathf.PI) * 0.75f;
+            ApplyTint();
+            yield return null;
+        }
+        _pulseIntensity = 0f;
+        ApplyTint();
+    }
+
     public void UpdateVisuals()
     {
         ApplyTint();
         UpdateWarriorVisuals();
         UpdateYurtVisuals();
+        UpdateDecoOpacity();
     }
 
     private void ApplyTint()
@@ -104,12 +143,18 @@ public class Tile : MonoBehaviour
             tint = _baseColor * _selectedTint;
         else if (_isHighlighted)
             tint = Color.Lerp(_baseColor, _highlightColor, 0.60f);
+        else if (_isHovered)
+            tint = _baseColor * _hoverTint;
         else if (OwnerPlayerId == 0)
-            tint = Color.Lerp(_baseColor, _baseColor * _player0Tint, 0.55f);
+            tint = Color.Lerp(_baseColor, _player0Tint, IsContested ? 0.22f : 0.45f);
         else if (OwnerPlayerId == 1)
-            tint = Color.Lerp(_baseColor, _baseColor * _player1Tint, 0.55f);
+            tint = Color.Lerp(_baseColor, _player1Tint, IsContested ? 0.22f : 0.45f);
         else
             tint = _baseColor;
+
+        // Conquest pulse: flash toward white
+        if (_pulseIntensity > 0f)
+            tint = Color.Lerp(tint, Color.white, _pulseIntensity);
 
         _propBlock.SetColor(BaseColorId, tint);
         _propBlock.SetColor(ColorId,     tint);
@@ -135,7 +180,11 @@ public class Tile : MonoBehaviour
         Vector3[] positions = Formations[toShow - 1];
 
         for (int i = 0; i < toShow; i++)
-            _activeWarriors.Add(SpawnWarrior(positions[i]));
+        {
+            GameObject w = SpawnWarrior(positions[i]);
+            ApplyOwnerTintToObject(w);
+            _activeWarriors.Add(w);
+        }
 
         if (CubeCount > MaxShownWarriors)
             ShowCountLabel(CubeCount);
@@ -218,6 +267,7 @@ public class Tile : MonoBehaviour
                 _activeYurtInstance.transform.localPosition = Vector3.zero;
                 _activeYurtInstance.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                 MakeSemiTransparent(_activeYurtInstance);
+                ApplyOwnerTintToObject(_activeYurtInstance);
                 StartCoroutine(AutoScaleYurt(_activeYurtInstance));
             }
             else
@@ -236,6 +286,57 @@ public class Tile : MonoBehaviour
         {
             Destroy(_activeYurtInstance);
             _activeYurtInstance = null;
+        }
+    }
+
+    public void RegisterDecoRenderer(Renderer r)
+    {
+        if (r != null) _decoRenderers.Add(r);
+    }
+
+    private void UpdateDecoOpacity()
+    {
+        if (_decoRenderers.Count == 0) return;
+
+        float alpha;
+        if (_isHovered)
+            alpha = 0.70f;
+        else if (CubeCount > 0 || HasYurt)
+            alpha = 0.22f;
+        else
+            alpha = 0.52f;
+
+        foreach (Renderer r in _decoRenderers)
+        {
+            if (r == null || r.material == null) continue;
+            if (r.material.HasProperty(BaseColorId))
+            {
+                Color c = r.material.GetColor(BaseColorId); c.a = alpha;
+                r.material.SetColor(BaseColorId, c);
+            }
+            if (r.material.HasProperty(ColorId))
+            {
+                Color c = r.material.GetColor(ColorId); c.a = alpha;
+                r.material.SetColor(ColorId, c);
+            }
+        }
+    }
+
+    private void ApplyOwnerTintToObject(GameObject go)
+    {
+        if (go == null) return;
+        Color tint = OwnerPlayerId == 0 ? _player0Tint
+                   : OwnerPlayerId == 1 ? _player1Tint
+                   : Color.white;
+        if (tint == Color.white) return;
+
+        MaterialPropertyBlock pb = new MaterialPropertyBlock();
+        foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+        {
+            r.GetPropertyBlock(pb);
+            pb.SetColor(BaseColorId, tint);
+            pb.SetColor(ColorId,     tint);
+            r.SetPropertyBlock(pb);
         }
     }
 
