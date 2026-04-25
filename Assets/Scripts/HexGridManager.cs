@@ -68,6 +68,9 @@ public class HexGridManager : MonoBehaviour
                     tileGo = Instantiate(selectedPrefab, worldPos, selectedPrefab.transform.rotation, transform);
                     tileGo.name = $"Tile_{q}_{r}";
                     tileGo.transform.Rotate(0, Random.Range(0, 6) * 60f, 0, Space.World);
+                    // Compress mountain tiles so their tall mesh doesn't bleed into adjacent hexes.
+                    if (terrain == TerrainType.Mountain)
+                        tileGo.transform.localScale = new Vector3(1f, 0.62f, 1f);
 
                     Tile tile = tileGo.GetComponent<Tile>();
                     if (tile == null)
@@ -132,8 +135,8 @@ public class HexGridManager : MonoBehaviour
                 case TerrainType.Mountain:
                     primaryPool   = rockPrefabs;
                     secondaryPool = rockPrefabs;
-                    maxCount      = 2;
-                    spawnChance   = 0.55f;
+                    maxCount      = 1;
+                    spawnChance   = 0.45f;
                     break;
                 case TerrainType.Water:
                     continue;

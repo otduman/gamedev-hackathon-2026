@@ -60,6 +60,7 @@ public class UIManager : MonoBehaviour
 
     // Migration count panel
     private GameObject          _migrationCountPanel;
+    private TextMeshProUGUI     _migrationCountTitle;
     private TextMeshProUGUI     _migrationCountText;
     private int                 _migrationCount;
     private int                 _migrationCountMax;
@@ -324,6 +325,7 @@ public class UIManager : MonoBehaviour
                 case GameState.Reinforce:       _phaseText.text = "Phase: Reinforce"; break;
                 case GameState.Action:          _phaseText.text = "Phase: Action";    break;
                 case GameState.CombatSetup:     _phaseText.text = "Phase: Combat";    break;
+                case GameState.PostConquest:    _phaseText.text = "Phase: Advance";   break;
                 case GameState.MigrationCheck:  _phaseText.text = "Phase: Migration"; break;
                 case GameState.MigrationChoice: _phaseText.text = "Phase: Migration"; break;
                 case GameState.MigrationCount:  _phaseText.text = "Phase: Migration"; break;
@@ -844,7 +846,7 @@ public class UIManager : MonoBehaviour
             Vector2.zero, new Vector2(420f, 220f));
         _migrationCountPanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.92f);
 
-        CreateTMPLabel("Title", _migrationCountPanel,
+        _migrationCountTitle = CreateTMPLabel("Title", _migrationCountPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -22f), new Vector2(400f, 28f),
             "Migrate warriors", 18, FontStyles.Bold);
@@ -885,11 +887,12 @@ public class UIManager : MonoBehaviour
         _migrationCountPanel.SetActive(false);
     }
 
-    public void ShowMigrationCount(int max, int defaultCount)
+    public void ShowMigrationCount(int max, int defaultCount, string title = "Migrate warriors")
     {
         if (_migrationCountPanel == null) return;
         _migrationCountMax = Mathf.Max(1, max);
         _migrationCount    = Mathf.Clamp(defaultCount, 1, _migrationCountMax);
+        if (_migrationCountTitle != null) _migrationCountTitle.text = title;
         UpdateMigrationCountText();
         _migrationCountPanel.SetActive(true);
     }

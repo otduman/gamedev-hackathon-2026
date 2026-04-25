@@ -3,7 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public enum GameState { Reinforce, Action, CombatSetup, MigrationCheck, MigrationChoice, MigrationCount, GameOver }
+public enum GameState { Reinforce, Action, CombatSetup, PostConquest, MigrationCheck, MigrationChoice, MigrationCount, GameOver }
 
 public class GameManager : MonoBehaviour
 {
@@ -32,6 +32,10 @@ public class GameManager : MonoBehaviour
 
     // Pending destination while the migration count panel is open
     private Tile _pendingMigrationDest   = null;
+
+    // Pending tiles for the post-conquest advance step
+    private Tile _postConquestSource     = null;
+    private Tile _postConquestDest       = null;
 
     // True when the active migration is moving the yurt; false for warrior migration.
     // Set in HandleMigrationClick / OnMigrationChoose* and consumed in the destination handler.
@@ -489,19 +493,46 @@ public class GameManager : MonoBehaviour
                 ClanNames[1 - CurrentPlayerId]);
         }
 
-        _pendingAttacker = null;
-        _pendingDefender = null;
-        CurrentState = GameState.Action;
-
         RecalculatePrestige();
-        if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
 
         if (CheckWinCondition()) return;
 
         ClearSelection();
 
+        if (conquered)
+        {
+            // Risk rule: attacker must advance into the conquered tile.
+            _postConquestSource = attacker;
+            _postConquestDest   = defender;
+            _pendingAttacker    = null;
+            _pendingDefender    = null;
+            BeginPostConquestMove();
+            return;
+        }
+
+        _pendingAttacker = null;
+        _pendingDefender = null;
+        CurrentState = GameState.Action;
         if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
             UIManager.Instance.ShowMessage("ACTION: Select another tile to attack, or press End Turn.");
+        }
+    }
+
+    // Shows the advance panel after a successful conquest (Risk: must move ≥1 troop forward).
+    private void BeginPostConquestMove()
+    {
+        if (_postConquestSource == null || _postConquestDest == null) return;
+        int max = Mathf.Max(1, _postConquestSource.CubeCount - 1);
+        CurrentState = GameState.PostConquest;
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMigrationCount(max, max, "Advance troops");
+            UIManager.Instance.ShowMessage($"ADVANCE: Move warriors into conquered territory (1–{max}). Must advance at least 1.");
+        }
     }
 
     // Wired to the Cancel button on the combat-setup panel.
@@ -712,6 +743,29 @@ public class GameManager : MonoBehaviour
     // Wired to the Confirm button on the migration count panel.
     public void OnMigrationCountConfirm(int count)
     {
+        if (CurrentState == GameState.PostConquest)
+        {
+            if (_postConquestSource != null && _postConquestDest != null)
+            {
+                int advance = Mathf.Clamp(count, 1, _postConquestSource.CubeCount - 1);
+                _postConquestSource.PlayWalkAnimation();
+                _postConquestSource.RemoveCubes(advance);
+                _postConquestDest.AddCubes(advance);
+                _postConquestSource.UpdateVisuals();
+                _postConquestDest.UpdateVisuals();
+            }
+            _postConquestSource = null;
+            _postConquestDest   = null;
+            CurrentState = GameState.Action;
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.HideMigrationCount();
+                UIManager.Instance.UpdateUI();
+                UIManager.Instance.ShowMessage("ACTION: Select another tile to attack, or press End Turn.");
+            }
+            return;
+        }
+
         if (CurrentState != GameState.MigrationCount) return;
         if (_selectedTile == null || _pendingMigrationDest == null) return;
 
@@ -739,6 +793,13 @@ public class GameManager : MonoBehaviour
     // Wired to the Cancel button on the migration count panel.
     public void OnMigrationCountCancel()
     {
+        // During post-conquest the player must advance; cancel forces the minimum of 1.
+        if (CurrentState == GameState.PostConquest)
+        {
+            OnMigrationCountConfirm(1);
+            return;
+        }
+
         if (CurrentState != GameState.MigrationCount) return;
         _pendingMigrationDest = null;
         CurrentState = GameState.MigrationCheck;
