@@ -2,6 +2,8 @@
 
 Guidance for Claude Code when working in this repo.
 
+> **⚡ IMPORTANT:** Read [`ARCHITECTURE.md`](ARCHITECTURE.md) before exploring any source files. It contains the full project structure, all file roles, state machine, game rules, data flows, and conventions. Do NOT re-read individual script files for orientation — everything you need is in that document.
+
 ## Project Overview
 
 Unity 6 (URP) hex-grid strategy game inspired by Risk, themed around Kazakh nomadic clans (Argyn vs. Naiman). Two-player local hot-seat. First clan to **15 Prestige** — or to wipe the opponent off the map — wins.
