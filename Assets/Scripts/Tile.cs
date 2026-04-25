@@ -27,6 +27,7 @@ public class Tile : MonoBehaviour
     private GameObject            _activeYurtInstance;
     private List<GameObject>      _activeWarriors      = new List<GameObject>();
     private int                   _spawnedWarriorCount = -1;
+    private bool                  _spawnedHadYurt      = false;
     private List<Renderer>        _decoRenderers       = new List<Renderer>();
 
     private MaterialPropertyBlock _propBlock;
@@ -51,6 +52,9 @@ public class Tile : MonoBehaviour
     private const float WarriorYOffset   = -0.15f;
     private const int   MaxShownWarriors = 5;
 
+    // Mountain peaks rise above the tile origin — units placed at y=0 sink into the mesh.
+    private const float MountainYLift    = 1.10f;
+
     private static readonly Vector3[][] Formations = new Vector3[][]
     {
         new[] { Vector3.zero },
@@ -61,6 +65,19 @@ public class Tile : MonoBehaviour
         new[] { new Vector3( 0.00f, 0f,  0.00f), new Vector3( 0.00f, 0f, -0.32f),
                 new Vector3( 0.32f, 0f,  0.00f), new Vector3( 0.00f, 0f,  0.32f),
                 new Vector3(-0.32f, 0f,  0.00f) },
+    };
+
+    // When a yurt occupies the tile, soldiers ring it at a fixed radius instead of clumping to one side.
+    private static readonly Vector3[][] YurtFormations = new Vector3[][]
+    {
+        new[] { new Vector3( 0.00f, 0f, -0.45f) },
+        new[] { new Vector3(-0.45f, 0f,  0.00f), new Vector3( 0.45f, 0f,  0.00f) },
+        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3(-0.40f, 0f,  0.23f), new Vector3( 0.40f, 0f,  0.23f) },
+        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3( 0.45f, 0f,  0.00f),
+                new Vector3( 0.00f, 0f,  0.45f), new Vector3(-0.45f, 0f,  0.00f) },
+        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3( 0.43f, 0f, -0.14f),
+                new Vector3( 0.26f, 0f,  0.37f), new Vector3(-0.26f, 0f,  0.37f),
+                new Vector3(-0.43f, 0f, -0.14f) },
     };
 
     public void Initialize(Vector2Int coords, TerrainType terrain)
@@ -163,14 +180,16 @@ public class Tile : MonoBehaviour
 
     private void UpdateWarriorVisuals()
     {
-        if (_spawnedWarriorCount == CubeCount)
+        // Force a rebuild whenever the yurt appears/disappears so warriors re-offset away from it.
+        if (_spawnedWarriorCount == CubeCount && _spawnedHadYurt == HasYurt)
         {
-            // Count unchanged — re-tint existing warriors so conquest changes their colour.
+            // Count + yurt state unchanged — re-tint existing warriors so conquest changes their colour.
             foreach (GameObject w in _activeWarriors)
                 if (w != null) ApplyOwnerTintToObject(w);
             return;
         }
         _spawnedWarriorCount = CubeCount;
+        _spawnedHadYurt      = HasYurt;
 
         foreach (GameObject w in _activeWarriors)
             if (w != null) Destroy(w);
@@ -183,7 +202,7 @@ public class Tile : MonoBehaviour
         }
 
         int toShow = Mathf.Min(CubeCount, MaxShownWarriors);
-        Vector3[] positions = Formations[toShow - 1];
+        Vector3[] positions = HasYurt ? YurtFormations[toShow - 1] : Formations[toShow - 1];
 
         for (int i = 0; i < toShow; i++)
         {
@@ -200,11 +219,13 @@ public class Tile : MonoBehaviour
 
     private GameObject SpawnWarrior(Vector3 localPos)
     {
+        float terrainLift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
+
         GameObject warrior;
         if (warriorPrefab != null)
         {
             warrior = Instantiate(warriorPrefab, transform);
-            warrior.transform.localPosition = localPos + new Vector3(0f, WarriorYOffset, 0f);
+            warrior.transform.localPosition = localPos + new Vector3(0f, WarriorYOffset + terrainLift, 0f);
             warrior.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             warrior.transform.localScale    = Vector3.one * WarriorScale;
 
@@ -217,7 +238,7 @@ public class Tile : MonoBehaviour
         {
             warrior = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             warrior.transform.SetParent(transform, false);
-            warrior.transform.localPosition = localPos + new Vector3(0f, 0.25f, 0f);
+            warrior.transform.localPosition = localPos + new Vector3(0f, 0.25f + terrainLift, 0f);
             warrior.transform.localScale    = new Vector3(0.18f, 0.25f, 0.18f);
             Destroy(warrior.GetComponent<Collider>());
         }
@@ -267,10 +288,12 @@ public class Tile : MonoBehaviour
     {
         if (HasYurt && _activeYurtInstance == null)
         {
+            float terrainLift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
+
             if (yurtPrefab != null)
             {
                 _activeYurtInstance = Instantiate(yurtPrefab, transform);
-                _activeYurtInstance.transform.localPosition = Vector3.zero;
+                _activeYurtInstance.transform.localPosition = new Vector3(0f, terrainLift, 0f);
                 _activeYurtInstance.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                 MakeSemiTransparent(_activeYurtInstance);
                 ApplyOwnerTintToObject(_activeYurtInstance);
@@ -280,7 +303,7 @@ public class Tile : MonoBehaviour
             {
                 _activeYurtInstance = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 _activeYurtInstance.transform.SetParent(transform, false);
-                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0.6f + terrainLift, 0f);
                 _activeYurtInstance.transform.localScale    = new Vector3(0.3f, 0.3f, 0.3f);
                 Renderer r = _activeYurtInstance.GetComponent<Renderer>();
                 if (r != null) r.material.color = new Color(1f, 0.85f, 0.1f);
@@ -312,7 +335,7 @@ public class Tile : MonoBehaviour
         if (_isHovered)
             alpha = 0.70f;
         else if (CubeCount > 0 || HasYurt)
-            alpha = 0.22f;
+            alpha = Terrain == TerrainType.Mountain ? 0.05f : 0.22f;
         else
             alpha = 0.52f;
 

@@ -3,7 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public enum GameState { Reinforce, Action, CombatSetup, MigrationCheck, MigrationCount, GameOver }
+public enum GameState { Reinforce, Action, CombatSetup, MigrationCheck, MigrationChoice, MigrationCount, GameOver }
 
 public class GameManager : MonoBehaviour
 {
@@ -32,6 +32,10 @@ public class GameManager : MonoBehaviour
 
     // Pending destination while the migration count panel is open
     private Tile _pendingMigrationDest   = null;
+
+    // True when the active migration is moving the yurt; false for warrior migration.
+    // Set in HandleMigrationClick / OnMigrationChoose* and consumed in the destination handler.
+    private bool _yurtMigrationMode      = false;
 
     // Reachable tiles from the current migration selection (BFS result)
     private Dictionary<Tile, int> _reachableTiles = new Dictionary<Tile, int>();
@@ -234,9 +238,9 @@ public class GameManager : MonoBehaviour
             ownedCount++;
             if (tile.HasYurt) yurtCount++;
         }
-        // Each yurt grants +1 warrior per round. Both players start with +1 (their starting
-        // yurt); conquering an enemy yurt raises the bonus to +2.
-        return Mathf.Max(3, ownedCount / 3) + yurtCount;
+        // Base is max(3, tiles/3). Each *extra* yurt beyond the first adds +1
+        // (conquering an enemy yurt goes from 3 to 4, two conquests → 5, etc.).
+        return Mathf.Max(3, ownedCount / 3) + Mathf.Max(0, yurtCount - 1);
     }
 
     private int CountYurts(int playerId)
@@ -437,6 +441,7 @@ public class GameManager : MonoBehaviour
         {
             UIManager.Instance.UpdateUI();
             UIManager.Instance.ShowCombatSetup(
+                CurrentPlayerId, 1 - CurrentPlayerId,
                 maxAtk, maxDef,
                 ClanNames[CurrentPlayerId],
                 ClanNames[1 - CurrentPlayerId]);
@@ -479,6 +484,7 @@ public class GameManager : MonoBehaviour
             UIManager.Instance.HideCombatSetup();
             UIManager.Instance.ShowCombatResult(
                 CombatManager.Instance.LastResult,
+                CurrentPlayerId, 1 - CurrentPlayerId,
                 ClanNames[CurrentPlayerId],
                 ClanNames[1 - CurrentPlayerId]);
         }
@@ -562,27 +568,44 @@ public class GameManager : MonoBehaviour
             if (clicked.OwnerPlayerId != CurrentPlayerId) return;
             if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
 
-            // Yurt tiles: enter yurt-move mode regardless of warrior count
-            if (clicked.HasYurt)
+            bool canMoveYurt     = clicked.HasYurt;
+            bool canMoveWarriors = clicked.CubeCount >= 2;
+            if (!canMoveYurt && !canMoveWarriors) return;
+
+            // Both options available — let the player choose.
+            if (canMoveYurt && canMoveWarriors)
             {
                 _selectedTile = clicked;
                 _selectedTile.SetSelected(true);
-                HighlightYurtTargets(_selectedTile);
+                CurrentState = GameState.MigrationChoice;
                 if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage(
-                        "YURT: Click any of your tiles to relocate your camp (warriors stay behind).");
+                {
+                    UIManager.Instance.UpdateUI();
+                    UIManager.Instance.ShowMigrationChoice();
+                    UIManager.Instance.ShowMessage("Move soldiers or relocate the yurt?");
+                }
                 return;
             }
 
-            // Warrior migration requires at least 2 (leave 1 behind)
-            if (clicked.CubeCount < 2) return;
-
+            // Single-option tiles enter the matching mode directly.
             _selectedTile = clicked;
             _selectedTile.SetSelected(true);
-            HighlightMigrationTargets(_selectedTile);
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage(
-                    "Click any of your tiles to migrate warriors. You will pick how many.");
+            if (canMoveYurt)
+            {
+                _yurtMigrationMode = true;
+                HighlightYurtTargets(_selectedTile);
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowMessage(
+                        "YURT: Click an adjacent own tile to relocate (1-tile range).");
+            }
+            else
+            {
+                _yurtMigrationMode = false;
+                HighlightMigrationTargets(_selectedTile);
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowMessage(
+                        "Click any of your tiles to migrate warriors. You will pick how many.");
+            }
             return;
         }
 
@@ -611,13 +634,60 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (_selectedTile.HasYurt)
+        if (_yurtMigrationMode)
         {
             ExecuteYurtMove(_selectedTile, clicked);
         }
         else
         {
             BeginMigrationCount(clicked);
+        }
+    }
+
+    // Wired to the "Move Soldiers" button on the migration choice panel.
+    public void OnMigrationChooseSoldiers()
+    {
+        if (CurrentState != GameState.MigrationChoice || _selectedTile == null) return;
+        _yurtMigrationMode = false;
+        CurrentState = GameState.MigrationCheck;
+        HighlightMigrationTargets(_selectedTile);
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideMigrationChoice();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "Click any of your tiles to migrate warriors. You will pick how many.");
+        }
+    }
+
+    // Wired to the "Move Yurta" button on the migration choice panel.
+    public void OnMigrationChooseYurta()
+    {
+        if (CurrentState != GameState.MigrationChoice || _selectedTile == null) return;
+        _yurtMigrationMode = true;
+        CurrentState = GameState.MigrationCheck;
+        HighlightYurtTargets(_selectedTile);
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideMigrationChoice();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "YURT: Click an adjacent own tile to relocate (1-tile range).");
+        }
+    }
+
+    // Wired to the Cancel button on the migration choice panel.
+    public void OnMigrationChoiceCancel()
+    {
+        if (CurrentState != GameState.MigrationChoice) return;
+        CurrentState = GameState.MigrationCheck;
+        ClearSelection();
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideMigrationChoice();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
         }
     }
 
@@ -686,6 +756,15 @@ public class GameManager : MonoBehaviour
 
     private void ExecuteYurtMove(Tile source, Tile destination)
     {
+        // Safety: never overwrite an existing yurt — one per tile only.
+        if (destination.HasYurt)
+        {
+            ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("That tile already has a yurt. Pick another destination.");
+            return;
+        }
+
         // Yurt migrates alone — soldiers stay where they are.
         source.SetHasYurt(false);
         destination.SetHasYurt(true);
@@ -742,13 +821,17 @@ public class GameManager : MonoBehaviour
 
     private void HighlightYurtTargets(Tile source)
     {
-        // Yurt can relocate to any tile reachable through own territory (same BFS as warriors).
+        // Yurta migration is capped at 1 tile per turn, and only one yurt per tile is allowed.
         ClearHighlights();
-        _reachableTiles = GetMigrationReachable(source);
-        foreach (Tile target in _reachableTiles.Keys)
+        _reachableTiles = new Dictionary<Tile, int>();
+        foreach (Tile n in HexGridManager.Instance.GetNeighbors(source.HexCoordinates))
         {
-            target.SetHighlighted(true, _yurtMoveHighlight);
-            _highlightedTiles.Add(target);
+            if (n.OwnerPlayerId != CurrentPlayerId) continue;
+            if (n.Terrain == TerrainType.Water || n.Terrain == TerrainType.Mountain) continue;
+            if (n.HasYurt) continue; // unique-building rule: one yurt per tile
+            _reachableTiles[n] = 1;
+            n.SetHighlighted(true, _yurtMoveHighlight);
+            _highlightedTiles.Add(n);
         }
     }
 
@@ -850,7 +933,8 @@ public class GameManager : MonoBehaviour
             _selectedTile.UpdateVisuals();
             _selectedTile = null;
         }
-        _moveCount = 0;
+        _moveCount         = 0;
+        _yurtMigrationMode = false;
         _reachableTiles.Clear();
         ClearHighlights();
     }

@@ -64,6 +64,13 @@ public class UIManager : MonoBehaviour
     private int                 _migrationCount;
     private int                 _migrationCountMax;
 
+    // Migration choice panel (Soldier vs Yurta)
+    private GameObject          _migrationChoicePanel;
+
+    // Combat setup header refs (re-coloured per attack based on initiator)
+    private TextMeshProUGUI     _atkHeader;
+    private TextMeshProUGUI     _defHeader;
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
@@ -119,6 +126,13 @@ public class UIManager : MonoBehaviour
         BuildTooltipPanel();
         BuildCombatSetupPanel();
         BuildMigrationCountPanel();
+        BuildMigrationChoicePanel();
+    }
+
+    // Public helper so other systems (and the dice panel) can colour UI by initiator.
+    public static Color GetClanColor(int playerId)
+    {
+        return playerId == 0 ? _clan0Color : _clan1Color;
     }
 
     // Top bar — turn, phase, and instruction message
@@ -311,6 +325,7 @@ public class UIManager : MonoBehaviour
                 case GameState.Action:          _phaseText.text = "Phase: Action";    break;
                 case GameState.CombatSetup:     _phaseText.text = "Phase: Combat";    break;
                 case GameState.MigrationCheck:  _phaseText.text = "Phase: Migration"; break;
+                case GameState.MigrationChoice: _phaseText.text = "Phase: Migration"; break;
                 case GameState.MigrationCount:  _phaseText.text = "Phase: Migration"; break;
                 case GameState.GameOver:        _phaseText.text = "Game Over";        break;
             }
@@ -352,7 +367,9 @@ public class UIManager : MonoBehaviour
     }
 
     // Visual dice overload — primary path when CombatResult is available.
-    public void ShowCombatResult(CombatResult result, string attackerClanName, string defenderClanName)
+    public void ShowCombatResult(CombatResult result,
+                                 int attackerPlayerId, int defenderPlayerId,
+                                 string attackerClanName, string defenderClanName)
     {
         if (_diceCombatPanel == null || result == null) return;
 
@@ -363,7 +380,7 @@ public class UIManager : MonoBehaviour
         foreach (Transform child in _diceCombatPanel.transform)
             Destroy(child.gameObject);
 
-        PopulateDicePanel(result, attackerClanName, defenderClanName);
+        PopulateDicePanel(result, attackerPlayerId, defenderPlayerId, attackerClanName, defenderClanName);
 
         _diceCombatPanel.SetActive(true);
         _diceHideCoroutine = StartCoroutine(HideDicePanelAfterDelay(3f));
@@ -373,7 +390,9 @@ public class UIManager : MonoBehaviour
     // Dice panel population helpers
     // -------------------------------------------------------------------------
 
-    private void PopulateDicePanel(CombatResult result, string attackerName, string defenderName)
+    private void PopulateDicePanel(CombatResult result,
+                                   int attackerPlayerId, int defenderPlayerId,
+                                   string attackerName, string defenderName)
     {
         // Panel is 560×220.  All anchoredPositions are relative to the panel centre.
         //   Header label  y = +85
@@ -382,8 +401,10 @@ public class UIManager : MonoBehaviour
         //   Summary line  y = -50
         //   Conquered     y = -83  (conditional)
 
-        Color attackerColor = new Color(0.20f, 0.40f, 1.00f);
-        Color defenderColor = new Color(1.00f, 0.30f, 0.20f);
+        // Initiator-aware colours: whoever is actually attacking gets their clan colour,
+        // not the static "Blue=Attacker / Red=Defender" baseline.
+        Color attackerColor = GetClanColor(attackerPlayerId);
+        Color defenderColor = GetClanColor(defenderPlayerId);
 
         // Header
         CreateTMPLabel("Header", _diceCombatPanel,
@@ -700,11 +721,10 @@ public class UIManager : MonoBehaviour
             new Vector2(0f, -22f), new Vector2(540f, 32f),
             "Combat Setup", 22, FontStyles.Bold);
 
-        TextMeshProUGUI atkHeader = CreateTMPLabel("AtkHeader", _combatSetupPanel,
+        _atkHeader = CreateTMPLabel("AtkHeader", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(-130f, 75f), new Vector2(220f, 24f),
             "Attacker dice", 14, FontStyles.Bold);
-        atkHeader.color = _clan0Color;
 
         _atkDiceButtons = new Button[3];
         for (int i = 0; i < 3; i++)
@@ -721,11 +741,10 @@ public class UIManager : MonoBehaviour
             new Vector2(-130f, -10f), new Vector2(220f, 22f),
             "Selected: 0", 13, FontStyles.Normal);
 
-        TextMeshProUGUI defHeader = CreateTMPLabel("DefHeader", _combatSetupPanel,
+        _defHeader = CreateTMPLabel("DefHeader", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(130f, 75f), new Vector2(220f, 24f),
             "Defender dice", 14, FontStyles.Bold);
-        defHeader.color = _clan1Color;
 
         _defDiceButtons = new Button[2];
         for (int i = 0; i < 2; i++)
@@ -763,7 +782,9 @@ public class UIManager : MonoBehaviour
         _combatSetupPanel.SetActive(false);
     }
 
-    public void ShowCombatSetup(int maxAtk, int maxDef, string atkClan, string defClan)
+    public void ShowCombatSetup(int attackerPlayerId, int defenderPlayerId,
+                                int maxAtk, int maxDef,
+                                string atkClan, string defClan)
     {
         if (_combatSetupPanel == null) return;
         _atkDiceMax = maxAtk;
@@ -775,6 +796,11 @@ public class UIManager : MonoBehaviour
             _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
         for (int i = 0; i < _defDiceButtons.Length; i++)
             _defDiceButtons[i].interactable = (i + 1) <= maxDef;
+
+        // Headers re-coloured each time so the initiator (whoever is attacking) appears
+        // in their own clan colour, not always blue/red.
+        if (_atkHeader != null) _atkHeader.color = GetClanColor(attackerPlayerId);
+        if (_defHeader != null) _defHeader.color = GetClanColor(defenderPlayerId);
 
         UpdateAtkDiceLabel(atkClan);
         UpdateDefDiceLabel(defClan);
@@ -883,6 +909,62 @@ public class UIManager : MonoBehaviour
     {
         if (_migrationCountText != null)
             _migrationCountText.text = $"{_migrationCount} / {_migrationCountMax}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Migration choice panel — pick whether to move soldiers or relocate the yurt
+    // -------------------------------------------------------------------------
+
+    private void BuildMigrationChoicePanel()
+    {
+        _migrationChoicePanel = CreatePanel("MigrationChoicePanel", gameObject,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(440f, 200f));
+        _migrationChoicePanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.92f);
+
+        CreateTMPLabel("Title", _migrationChoicePanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -22f), new Vector2(420f, 28f),
+            "Move soldiers or relocate yurt?", 17, FontStyles.Bold);
+
+        CreateButton("MoveSoldiers", _migrationChoicePanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-100f, 0f), new Vector2(170f, 60f),
+            "Move Soldiers", new Color(0.15f, 0.55f, 0.15f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnMigrationChooseSoldiers();
+            });
+
+        CreateButton("MoveYurta", _migrationChoicePanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(100f, 0f), new Vector2(170f, 60f),
+            "Move Yurta", new Color(0.85f, 0.65f, 0.10f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnMigrationChooseYurta();
+            });
+
+        CreateButton("CancelChoice", _migrationChoicePanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 25f), new Vector2(140f, 38f),
+            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnMigrationChoiceCancel();
+            });
+
+        _migrationChoicePanel.SetActive(false);
+    }
+
+    public void ShowMigrationChoice()
+    {
+        if (_migrationChoicePanel != null) _migrationChoicePanel.SetActive(true);
+    }
+
+    public void HideMigrationChoice()
+    {
+        if (_migrationChoicePanel != null) _migrationChoicePanel.SetActive(false);
     }
 
     // -------------------------------------------------------------------------
