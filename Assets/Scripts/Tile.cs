@@ -14,6 +14,8 @@ public class Tile : MonoBehaviour
     public bool HasYurt              { get; private set; }
     public bool HasForest            { get; private set; }
     public bool IsContested          { get; private set; }
+    public string CityName           { get; private set; }
+    public bool IsKeyRegion          { get; private set; }
 
     // Cost to enter this tile during migration (forest = 2 movement points, otherwise 1)
     public int MoveCost => HasForest ? 2 : 1;
@@ -45,6 +47,7 @@ public class Tile : MonoBehaviour
 
     private static readonly Color _player0Tint  = new Color(0.25f, 0.55f, 1.00f, 1f);
     private static readonly Color _player1Tint  = new Color(1.00f, 0.28f, 0.28f, 1f);
+    private static readonly Color _neutralTint  = new Color(0.55f, 0.55f, 0.55f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
     private const float YurtScale        = 1.1f;
@@ -99,6 +102,7 @@ public class Tile : MonoBehaviour
     public void SetHasYurt(bool value)  { HasYurt = value;   UpdateVisuals(); }
     public void SetHasForest(bool value) { HasForest = value; }
     public void SetContested(bool contested) { IsContested = contested; UpdateVisuals(); }
+    public void SetCityInfo(string name, bool keyRegion) { CityName = name; IsKeyRegion = keyRegion; }
     public void SetSelected(bool sel)   { _isSelected = sel; UpdateVisuals(); }
 
     public void SetHovered(bool hovered)
@@ -358,10 +362,10 @@ public class Tile : MonoBehaviour
     private void ApplyOwnerTintToObject(GameObject go)
     {
         if (go == null) return;
+        // Neutral garrisons get a flat grey so they read as unaligned at a glance.
         Color tint = OwnerPlayerId == 0 ? _player0Tint
                    : OwnerPlayerId == 1 ? _player1Tint
-                   : Color.white;
-        if (tint == Color.white) return;
+                   : _neutralTint;
 
         MaterialPropertyBlock pb = new MaterialPropertyBlock();
         foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))

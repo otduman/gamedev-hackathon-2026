@@ -12,12 +12,16 @@ public class UIManager : MonoBehaviour
     // -------------------------------------------------------------------------
     // Colour palette
     // -------------------------------------------------------------------------
-    private static readonly Color _clan0Color  = new Color(0.20f, 0.40f, 1.00f);
-    private static readonly Color _clan1Color  = new Color(1.00f, 0.30f, 0.20f);
-    private static readonly Color _panelColor  = new Color(0.00f, 0.00f, 0.00f, 0.70f);
-    private static readonly Color _buttonColor = new Color(0.15f, 0.55f, 0.15f);
-    private static readonly Color _white       = Color.white;
-    private static readonly Color _goldColor   = new Color(1.00f, 0.84f, 0.00f);
+    private static readonly Color _clan0Color   = new Color(0.20f, 0.40f, 1.00f);
+    private static readonly Color _clan1Color   = new Color(1.00f, 0.30f, 0.20f);
+    private static readonly Color _panelColor   = new Color(0.04f, 0.07f, 0.13f, 0.88f);
+    private static readonly Color _buttonColor  = new Color(0.15f, 0.55f, 0.15f);
+    private static readonly Color _white        = Color.white;
+    private static readonly Color _goldColor    = new Color(0.95f, 0.78f, 0.28f);
+    private static readonly Color _trackColor   = new Color(0.10f, 0.12f, 0.18f, 0.85f);
+    private static readonly Color _parchmentInk = new Color(0.97f, 0.92f, 0.78f);
+
+    private const int PrestigeGoal = 15;
 
     // -------------------------------------------------------------------------
     // UI element references (built in Awake)
@@ -27,6 +31,8 @@ public class UIManager : MonoBehaviour
     private TextMeshProUGUI _messageText;
     private TextMeshProUGUI _clan0PrestigeText;
     private TextMeshProUGUI _clan1PrestigeText;
+    private Image           _clan0PrestigeFill;
+    private Image           _clan1PrestigeFill;
 
     private GameObject          _combatResultPanel;
     private TextMeshProUGUI     _combatResultText;
@@ -42,10 +48,12 @@ public class UIManager : MonoBehaviour
     private TextMeshProUGUI     _gameOverText;
 
     private GameObject          _tooltipPanel;
+    private TextMeshProUGUI     _tooltipCityText;
     private TextMeshProUGUI     _tooltipTerrainText;
     private TextMeshProUGUI     _tooltipOwnerText;
     private TextMeshProUGUI     _tooltipWarriorsText;
     private TextMeshProUGUI     _tooltipYurtText;
+    private TextMeshProUGUI     _tooltipKeyRegionText;
 
     // Combat setup panel (per-attack dice selection)
     private GameObject          _combatSetupPanel;
@@ -142,6 +150,7 @@ public class UIManager : MonoBehaviour
         GameObject panel = CreatePanel("TopBar", gameObject,
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -50f), new Vector2(0f, 100f));
+        AddGoldTrim(panel, 2f);
 
         _playerTurnText = CreateTMPLabel("PlayerTurnText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -160,29 +169,109 @@ public class UIManager : MonoBehaviour
         _messageText.color = new Color(0.85f, 0.85f, 0.85f);
     }
 
-    // Bottom-right prestige panel
+    // Bottom-right prestige panel with Civ-style gold-trimmed progress bars (15 = victory).
     private void BuildPrestigePanel()
     {
         GameObject panel = CreatePanel("PrestigePanel", gameObject,
             new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
-            new Vector2(-110f, 80f), new Vector2(220f, 120f));
+            new Vector2(-150f, 90f), new Vector2(290f, 170f));
+        AddGoldTrim(panel, 2f);
 
-        _clan0PrestigeText = CreateTMPLabel("Clan0Prestige", panel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 30f), new Vector2(200f, 30f),
-            "Argyn Prestige: 0", 15, FontStyles.Bold);
-        _clan0PrestigeText.color = _clan0Color;
+        // Banner header — small gold strip at top of the panel
+        TextMeshProUGUI title = CreateTMPLabel("PrestigeTitle", panel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -16f), new Vector2(260f, 24f),
+            "✦ Prestige to Victory ✦", 13, FontStyles.Bold);
+        title.color = _goldColor;
 
-        _clan1PrestigeText = CreateTMPLabel("Clan1Prestige", panel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 0f), new Vector2(200f, 30f),
-            "Naiman Prestige: 0", 15, FontStyles.Bold);
-        _clan1PrestigeText.color = _clan1Color;
+        // Argyn row
+        BuildPrestigeBar(panel, 0, new Vector2(0f, 30f),
+            "Argyn", _clan0Color, out _clan0PrestigeText, out _clan0PrestigeFill);
 
-        CreateTMPLabel("TargetText", panel,
+        // Naiman row
+        BuildPrestigeBar(panel, 1, new Vector2(0f, -22f),
+            "Naiman", _clan1Color, out _clan1PrestigeText, out _clan1PrestigeFill);
+
+        TextMeshProUGUI footer = CreateTMPLabel("TargetText", panel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 12f), new Vector2(260f, 18f),
+            $"First to {PrestigeGoal} prestige wins the steppe", 11, FontStyles.Italic);
+        footer.color = _parchmentInk;
+    }
+
+    private void BuildPrestigeBar(GameObject parent, int playerId, Vector2 anchoredCenter,
+                                  string clanLabel, Color clanColor,
+                                  out TextMeshProUGUI valueText, out Image fillImage)
+    {
+        // Clan label on the left of the row
+        TextMeshProUGUI label = CreateTMPLabel($"Clan{playerId}Label", parent,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -28f), new Vector2(200f, 24f),
-            "First to 15 wins", 12, FontStyles.Normal);
+            anchoredCenter + new Vector2(-105f, 0f), new Vector2(70f, 22f),
+            clanLabel, 13, FontStyles.Bold);
+        label.color = clanColor;
+        label.alignment = TextAlignmentOptions.MidlineRight;
+
+        // Track (background)
+        GameObject track = new GameObject($"Clan{playerId}Track");
+        track.transform.SetParent(parent.transform, false);
+        RectTransform trackRt = track.AddComponent<RectTransform>();
+        trackRt.anchorMin = trackRt.anchorMax = trackRt.pivot = new Vector2(0.5f, 0.5f);
+        trackRt.anchoredPosition = anchoredCenter + new Vector2(15f, 0f);
+        trackRt.sizeDelta = new Vector2(160f, 18f);
+        Image trackImg = track.AddComponent<Image>();
+        trackImg.color = _trackColor;
+
+        // Gold border around the track
+        AddGoldTrim(track, 1.5f);
+
+        // Fill (clipped via Image.Type.Filled + horizontal fill)
+        GameObject fillGo = new GameObject($"Clan{playerId}Fill");
+        fillGo.transform.SetParent(track.transform, false);
+        RectTransform fillRt = fillGo.AddComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = new Vector2(2f, 2f);
+        fillRt.offsetMax = new Vector2(-2f, -2f);
+        Image fill = fillGo.AddComponent<Image>();
+        fill.color = clanColor;
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fill.fillAmount = 0f;
+        fillImage = fill;
+
+        // "X / 15" numeric label centered over the bar
+        TextMeshProUGUI value = CreateTMPLabel($"Clan{playerId}Value", track,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(160f, 18f),
+            $"0 / {PrestigeGoal}", 11, FontStyles.Bold);
+        value.color = _white;
+        valueText = value;
+    }
+
+    // Adds 4 thin gold strips around a panel's edges to give it a Civilization-style frame.
+    private void AddGoldTrim(GameObject parent, float thickness)
+    {
+        AddTrimStrip(parent, "TrimTop",    new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, thickness));
+        AddTrimStrip(parent, "TrimBottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, thickness));
+        AddTrimStrip(parent, "TrimLeft",   new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(thickness, 0f));
+        AddTrimStrip(parent, "TrimRight",  new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(thickness, 0f));
+    }
+
+    private void AddTrimStrip(GameObject parent, string name,
+                              Vector2 anchorMin, Vector2 anchorMax, Vector2 sizeDelta)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent.transform, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = sizeDelta;
+        Image img = go.AddComponent<Image>();
+        img.color = _goldColor;
+        img.raycastTarget = false;
     }
 
     // End Turn button — bottom center
@@ -251,7 +340,7 @@ public class UIManager : MonoBehaviour
         _diceCombatPanel = CreatePanel("DiceCombatPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(560f, 220f));
-
+        AddGoldTrim(_diceCombatPanel, 2.5f);
         _diceCombatPanel.SetActive(false);
     }
 
@@ -261,7 +350,8 @@ public class UIManager : MonoBehaviour
         _gameOverPanel = CreatePanel("GameOverPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(600f, 300f));
-        (_gameOverPanel.GetComponent<Image>()).color = new Color(0f, 0f, 0f, 0.85f);
+        (_gameOverPanel.GetComponent<Image>()).color = new Color(0f, 0f, 0f, 0.92f);
+        AddGoldTrim(_gameOverPanel, 3f);
 
         _gameOverText = CreateTMPLabel("GameOverText", _gameOverPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -333,11 +423,18 @@ public class UIManager : MonoBehaviour
             }
         }
 
-        if (_clan0PrestigeText != null)
-            _clan0PrestigeText.text = $"Argyn Prestige: {GameManager.Instance.PlayerPrestige[0]}";
+        int p0 = GameManager.Instance.PlayerPrestige[0];
+        int p1 = GameManager.Instance.PlayerPrestige[1];
 
+        if (_clan0PrestigeText != null)
+            _clan0PrestigeText.text = $"{p0} / {PrestigeGoal}";
         if (_clan1PrestigeText != null)
-            _clan1PrestigeText.text = $"Naiman Prestige: {GameManager.Instance.PlayerPrestige[1]}";
+            _clan1PrestigeText.text = $"{p1} / {PrestigeGoal}";
+
+        if (_clan0PrestigeFill != null)
+            _clan0PrestigeFill.fillAmount = Mathf.Clamp01((float)p0 / PrestigeGoal);
+        if (_clan1PrestigeFill != null)
+            _clan1PrestigeFill.fillAmount = Mathf.Clamp01((float)p1 / PrestigeGoal);
 
         if (_endTurnButton != null)
         {
@@ -565,37 +662,48 @@ public class UIManager : MonoBehaviour
     // Tooltip panel — bottom-left corner, hidden until a tile is hovered
     private void BuildTooltipPanel()
     {
-        // Anchor to bottom-left corner.
         _tooltipPanel = CreatePanel("TooltipPanel", gameObject,
             new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
-            new Vector2(130f, 70f), new Vector2(240f, 120f));
+            new Vector2(130f, 90f), new Vector2(260f, 168f));
+        AddGoldTrim(_tooltipPanel, 1.5f);
 
-        // Terrain name — bold, white, top of panel.
+        // City banner — gold serif feel for the named region.
+        _tooltipCityText = CreateTMPLabel("TooltipCity", _tooltipPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -12f), new Vector2(240f, 22f),
+            "", 14, FontStyles.Bold);
+        _tooltipCityText.color = _goldColor;
+        _tooltipCityText.alignment = TextAlignmentOptions.Left;
+
+        _tooltipKeyRegionText = CreateTMPLabel("TooltipKeyRegion", _tooltipPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -32f), new Vector2(240f, 18f),
+            "★ Key Region (+2 Prestige)", 11, FontStyles.Italic);
+        _tooltipKeyRegionText.color = _parchmentInk;
+        _tooltipKeyRegionText.alignment = TextAlignmentOptions.Left;
+
         _tooltipTerrainText = CreateTMPLabel("TooltipTerrain", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -12f), new Vector2(220f, 26f),
-            "", 15, FontStyles.Bold);
+            new Vector2(0f, -54f), new Vector2(240f, 22f),
+            "", 13, FontStyles.Bold);
         _tooltipTerrainText.alignment = TextAlignmentOptions.Left;
 
-        // Owner line — coloured by clan.
         _tooltipOwnerText = CreateTMPLabel("TooltipOwner", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -36f), new Vector2(220f, 22f),
-            "", 13, FontStyles.Normal);
+            new Vector2(0f, -76f), new Vector2(240f, 20f),
+            "", 12, FontStyles.Normal);
         _tooltipOwnerText.alignment = TextAlignmentOptions.Left;
 
-        // Warriors count.
         _tooltipWarriorsText = CreateTMPLabel("TooltipWarriors", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -58f), new Vector2(220f, 22f),
-            "", 13, FontStyles.Normal);
+            new Vector2(0f, -96f), new Vector2(240f, 20f),
+            "", 12, FontStyles.Normal);
         _tooltipWarriorsText.alignment = TextAlignmentOptions.Left;
 
-        // Yurt bonus — only shown when tile.HasYurt is true.
         _tooltipYurtText = CreateTMPLabel("TooltipYurt", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -80f), new Vector2(220f, 22f),
-            "+2 Prestige Bonus", 13, FontStyles.Italic);
+            new Vector2(0f, -118f), new Vector2(240f, 20f),
+            "+2 Prestige Bonus (yurt)", 12, FontStyles.Italic);
         _tooltipYurtText.alignment = TextAlignmentOptions.Left;
         _tooltipYurtText.color = new Color(1.00f, 0.85f, 0.20f);
 
@@ -610,7 +718,16 @@ public class UIManager : MonoBehaviour
     {
         if (_tooltipPanel == null || tile == null) return;
 
-        // Terrain name with forest/movement cost annotation.
+        // City banner — only shown when the tile carries a name.
+        bool hasCity = !string.IsNullOrEmpty(tile.CityName);
+        _tooltipCityText.gameObject.SetActive(hasCity);
+        _tooltipKeyRegionText.gameObject.SetActive(hasCity && tile.IsKeyRegion);
+        if (hasCity)
+        {
+            _tooltipCityText.text  = tile.IsKeyRegion ? $"★ {tile.CityName}" : tile.CityName;
+            _tooltipCityText.color = tile.IsKeyRegion ? _goldColor : _parchmentInk;
+        }
+
         string terrainLabel = tile.Terrain switch
         {
             TerrainType.Plain    => "Plain",
@@ -623,7 +740,6 @@ public class UIManager : MonoBehaviour
         _tooltipTerrainText.text  = terrainLabel;
         _tooltipTerrainText.color = _white;
 
-        // Owner line — show contested status if applicable.
         if (tile.OwnerPlayerId == 0)
         {
             _tooltipOwnerText.text  = tile.IsContested ? "Owner: Argyn (Contested)" : "Owner: Argyn Clan";
@@ -640,13 +756,11 @@ public class UIManager : MonoBehaviour
             _tooltipOwnerText.color = new Color(0.65f, 0.65f, 0.65f);
         }
 
-        // Warriors count — dash for water or unoccupied neutral.
         bool showWarriors = tile.Terrain != TerrainType.Water &&
                             !(tile.OwnerPlayerId == -1 && tile.CubeCount == 0);
         _tooltipWarriorsText.text  = showWarriors ? $"Warriors: {tile.CubeCount}" : "Warriors: —";
         _tooltipWarriorsText.color = _white;
 
-        // Yurt bonus.
         _tooltipYurtText.gameObject.SetActive(tile.HasYurt);
 
         _tooltipPanel.SetActive(true);
@@ -716,7 +830,8 @@ public class UIManager : MonoBehaviour
         _combatSetupPanel = CreatePanel("CombatSetupPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(560f, 280f));
-        _combatSetupPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.10f, 0.92f);
+        _combatSetupPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.10f, 0.94f);
+        AddGoldTrim(_combatSetupPanel, 2.5f);
 
         CreateTMPLabel("Title", _combatSetupPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
@@ -844,7 +959,8 @@ public class UIManager : MonoBehaviour
         _migrationCountPanel = CreatePanel("MigrationCountPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(420f, 220f));
-        _migrationCountPanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.92f);
+        _migrationCountPanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.94f);
+        AddGoldTrim(_migrationCountPanel, 2.5f);
 
         _migrationCountTitle = CreateTMPLabel("Title", _migrationCountPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),

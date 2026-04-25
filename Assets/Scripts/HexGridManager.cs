@@ -22,6 +22,35 @@ public class HexGridManager : MonoBehaviour
 
     public Dictionary<Vector2Int, Tile> Grid { get; private set; } = new Dictionary<Vector2Int, Tile>();
 
+    // City roster — first 5 names are "key regions" granting +2 prestige instead of +1.
+    private static readonly string[] CityNames =
+    {
+        "Астана", "Туркестан", "Жезказган", "Кульджа", "Кашгар",
+        "Уральск", "Актобе", "Павлодар"
+    };
+    private const int KeyRegionCount = 5;
+
+    // Per-tile border line renderers, indexed by edge (0..5). Each edge corresponds to one
+    // neighbor direction in EdgeNeighborDirs — order matters and must stay in sync with the
+    // angle math in BuildBorderSegments().
+    private readonly Dictionary<Tile, LineRenderer[]> _borderSegments = new Dictionary<Tile, LineRenderer[]>();
+
+    // Pointy-top hex: edge i connects corner i (angle 60i+30°) to corner i+1.
+    // Edge midpoints face the listed neighbor — derived once and used for "smart border" logic.
+    private static readonly Vector2Int[] EdgeNeighborDirs = new Vector2Int[]
+    {
+        new Vector2Int( 0,  1),  // edge 0 — NE
+        new Vector2Int(-1,  1),  // edge 1 — NW
+        new Vector2Int(-1,  0),  // edge 2 — W
+        new Vector2Int( 0, -1),  // edge 3 — SW
+        new Vector2Int( 1, -1),  // edge 4 — SE
+        new Vector2Int( 1,  0),  // edge 5 — E
+    };
+
+    private static readonly Color BorderNeutralColor = new Color(0.10f, 0.06f, 0.02f, 0.55f);
+    private static readonly Color BorderClan0Color   = new Color(0.20f, 0.45f, 1.00f, 1f);
+    private static readonly Color BorderClan1Color   = new Color(1.00f, 0.32f, 0.18f, 1f);
+
     private static readonly Vector3[] DecoSpreadOffsets = new Vector3[]
     {
         new Vector3( 0.00f, 0f,  0.00f),
@@ -95,6 +124,8 @@ public class HexGridManager : MonoBehaviour
         }
 
         PlaceDecorations();
+        AssignCityNames();
+        PopulateNeutralGarrisons();
         AddHexBorders();
         CreateBackgroundPlane();
 
@@ -231,15 +262,12 @@ public class HexGridManager : MonoBehaviour
 
     }
 
+    // Builds 6 separate edge LineRenderers per tile. Each edge can be enabled/disabled and
+    // re-coloured independently so the visible outline tracks clan ownership — see RefreshBorders.
     private void AddHexBorders()
     {
-        // Pointy-top hex corners at 30°, 90°, 150° … (0° offset + 30° shift for KayKit tiles).
-        // Radius slightly inside hexSize so the border sits within the tile edge.
         const float borderRadius = 0.97f;
-        const float lineWidth    = 0.012f;
         const float yOffset      = 0.06f;
-
-        Color borderColor = new Color(0.08f, 0.05f, 0.02f, 0.18f);
 
         Shader urpUnlit     = Shader.Find("Universal Render Pipeline/Unlit");
         Shader builtinUnlit = Shader.Find("Unlit/Color");
@@ -247,35 +275,141 @@ public class HexGridManager : MonoBehaviour
 
         foreach (Tile tile in Grid.Values)
         {
-            GameObject borderGo = new GameObject("HexBorder");
-            borderGo.transform.SetParent(tile.transform, false);
-            borderGo.transform.localPosition = new Vector3(0f, yOffset, 0f);
+            GameObject borderRoot = new GameObject("HexBorderRoot");
+            borderRoot.transform.SetParent(tile.transform, false);
+            borderRoot.transform.localPosition = new Vector3(0f, yOffset, 0f);
 
-            LineRenderer lr = borderGo.AddComponent<LineRenderer>();
-            lr.loop             = true;
-            lr.positionCount    = 6;
-            lr.useWorldSpace    = false;
-            lr.startWidth       = lineWidth;
-            lr.endWidth         = lineWidth;
-            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            lr.receiveShadows   = false;
-
+            LineRenderer[] segments = new LineRenderer[6];
             float r = hexSize * borderRadius;
+
             for (int i = 0; i < 6; i++)
             {
-                float angle = Mathf.Deg2Rad * (60f * i + 30f); // 30° offset: pointy-top to match KayKit tiles
-                lr.SetPosition(i, new Vector3(Mathf.Cos(angle) * r, 0f, Mathf.Sin(angle) * r));
+                GameObject seg = new GameObject($"Edge{i}");
+                seg.transform.SetParent(borderRoot.transform, false);
+
+                LineRenderer lr = seg.AddComponent<LineRenderer>();
+                lr.useWorldSpace     = false;
+                lr.positionCount     = 2;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                lr.receiveShadows    = false;
+
+                float angleA = Mathf.Deg2Rad * (60f * i + 30f);
+                float angleB = Mathf.Deg2Rad * (60f * (i + 1) + 30f);
+                lr.SetPosition(0, new Vector3(Mathf.Cos(angleA) * r, 0f, Mathf.Sin(angleA) * r));
+                lr.SetPosition(1, new Vector3(Mathf.Cos(angleB) * r, 0f, Mathf.Sin(angleB) * r));
+
+                if (chosen != null)
+                {
+                    Material mat = new Material(chosen);
+                    lr.material = mat;
+                }
+
+                segments[i] = lr;
             }
 
-            if (chosen != null)
-            {
-                Material mat = new Material(chosen);
-                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", borderColor);
-                if (mat.HasProperty("_Color"))     mat.SetColor("_Color",     borderColor);
-                lr.material = mat;
-            }
-            lr.startColor = lr.endColor = borderColor;
+            _borderSegments[tile] = segments;
         }
+
+        RefreshAllBorders();
+    }
+
+    // Re-computes every tile's edge visibility and colour. Call after any ownership change.
+    public void RefreshAllBorders()
+    {
+        foreach (Tile tile in _borderSegments.Keys)
+            RefreshBorders(tile);
+    }
+
+    public void RefreshBorders(Tile tile)
+    {
+        if (tile == null) return;
+        if (!_borderSegments.TryGetValue(tile, out LineRenderer[] segments)) return;
+
+        bool   isOwned     = tile.OwnerPlayerId == 0 || tile.OwnerPlayerId == 1;
+        Color  ownedColor  = tile.OwnerPlayerId == 0 ? BorderClan0Color : BorderClan1Color;
+        float  ownedWidth  = 0.045f;
+        float  neutralWidth = 0.012f;
+
+        for (int i = 0; i < 6; i++)
+        {
+            LineRenderer lr = segments[i];
+            if (lr == null) continue;
+
+            Vector2Int neighborCoord = tile.HexCoordinates + EdgeNeighborDirs[i];
+            bool boundary;
+            if (Grid.TryGetValue(neighborCoord, out Tile neighbor))
+                boundary = neighbor.OwnerPlayerId != tile.OwnerPlayerId;
+            else
+                boundary = true; // map edge — always render
+
+            if (isOwned)
+            {
+                // Bold clan-coloured outline only on edges that face a different owner.
+                lr.enabled    = boundary;
+                lr.startColor = lr.endColor = ownedColor;
+                lr.startWidth = lr.endWidth = ownedWidth;
+            }
+            else
+            {
+                // Neutral tiles: subtle dark outline on every edge so hex grid is readable.
+                lr.enabled    = true;
+                lr.startColor = lr.endColor = BorderNeutralColor;
+                lr.startWidth = lr.endWidth = neutralWidth;
+            }
+
+            if (lr.material != null)
+            {
+                Color c = lr.startColor;
+                if (lr.material.HasProperty("_BaseColor")) lr.material.SetColor("_BaseColor", c);
+                if (lr.material.HasProperty("_Color"))     lr.material.SetColor("_Color",     c);
+            }
+        }
+    }
+
+    // Seeds every passable neutral tile with a garrison whose size grows toward the centre.
+    // The clusters that GameManager later assigns to clans will overwrite these values, so
+    // running this before OnGridReady is safe — see GameManager.PlaceStartCluster.
+    private void PopulateNeutralGarrisons()
+    {
+        foreach (Tile tile in Grid.Values)
+        {
+            if (tile.Terrain == TerrainType.Water || tile.Terrain == TerrainType.Mountain) continue;
+            if (tile.OwnerPlayerId != -1) continue;
+
+            int dist = HexDistanceFromOrigin(tile.HexCoordinates.x, tile.HexCoordinates.y);
+
+            int min, max;
+            if (tile.IsKeyRegion || dist <= 1)      { min = 4; max = 5; }
+            else if (dist >= mapRadius)             { min = 1; max = 2; }
+            else                                    { min = 2; max = 3; }
+
+            int garrison = Random.Range(min, max + 1);
+            tile.AddCubes(garrison);
+            tile.UpdateVisuals();
+        }
+    }
+
+    // Picks 8 land tiles (Plain/Pasture, no yurt yet) and stamps city names. The first
+    // KeyRegionCount names become "key regions" that grant +2 prestige instead of +1.
+    private void AssignCityNames()
+    {
+        List<Tile> candidates = new List<Tile>();
+        foreach (Tile t in Grid.Values)
+        {
+            if (t.Terrain == TerrainType.Plain || t.Terrain == TerrainType.Pasture)
+                candidates.Add(t);
+        }
+
+        // Fisher-Yates shuffle so the same name doesn't always land on the same tile.
+        for (int i = candidates.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            Tile tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
+        }
+
+        int n = Mathf.Min(CityNames.Length, candidates.Count);
+        for (int i = 0; i < n; i++)
+            candidates[i].SetCityInfo(CityNames[i], i < KeyRegionCount);
     }
 
     private static void MakeDecoTransparent(GameObject go, float alpha)

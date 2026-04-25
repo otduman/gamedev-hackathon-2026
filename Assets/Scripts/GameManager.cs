@@ -120,6 +120,7 @@ public class GameManager : MonoBehaviour
         PlaceStartCluster(1, cluster1);
 
         RecalculatePrestige();
+        HexGridManager.Instance.RefreshAllBorders();
         AudioManager.Instance?.PlayTurnStart();
         StartReinforce();
     }
@@ -167,11 +168,13 @@ public class GameManager : MonoBehaviour
     }
 
     // Places starting warriors and one yurt per clan (on the first tile of the cluster).
+    // Clears any neutral garrison HexGridManager seeded so the cluster starts at exactly 1 warrior.
     private void PlaceStartCluster(int playerId, List<Tile> cluster)
     {
         for (int i = 0; i < cluster.Count; i++)
         {
             Tile tile = cluster[i];
+            if (tile.CubeCount > 0) tile.RemoveCubes(tile.CubeCount);
             tile.OwnerPlayerId = playerId;
             tile.AddCubes(1);
             if (i == 0) tile.SetHasYurt(true); // nomadic base: 1 yurt per clan
@@ -396,7 +399,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (clicked.OwnerPlayerId == -1)
+        // Empty neutral land — walk in for free. Garrisoned neutrals fight back via the
+        // standard combat resolver (see PopulateNeutralGarrisons in HexGridManager).
+        if (clicked.OwnerPlayerId == -1 && clicked.CubeCount == 0)
         {
             ExpandIntoNeutral(_selectedTile, clicked);
             return;
@@ -418,6 +423,7 @@ public class GameManager : MonoBehaviour
         AudioManager.Instance?.PlayConquer();
 
         RecalculatePrestige();
+        HexGridManager.Instance.RefreshAllBorders();
         if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
 
         if (CheckWinCondition()) return;
@@ -494,6 +500,8 @@ public class GameManager : MonoBehaviour
         }
 
         RecalculatePrestige();
+        if (conquered) HexGridManager.Instance.RefreshAllBorders();
+        if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
 
         if (CheckWinCondition()) return;
 
@@ -561,7 +569,9 @@ public class GameManager : MonoBehaviour
         {
             if (neighbor.OwnerPlayerId == CurrentPlayerId) continue;
             if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
-            Color highlight = neighbor.OwnerPlayerId == -1 ? _neutralHighlight : _attackHighlight;
+            // Empty neutral = walk-in (yellow). Garrisoned neutral = real fight (red).
+            bool emptyNeutral = neighbor.OwnerPlayerId == -1 && neighbor.CubeCount == 0;
+            Color highlight = emptyNeutral ? _neutralHighlight : _attackHighlight;
             neighbor.SetHighlighted(true, highlight);
             _highlightedTiles.Add(neighbor);
         }
@@ -935,7 +945,7 @@ public class GameManager : MonoBehaviour
             {
                 if (tile.OwnerPlayerId != pid) continue;
                 if (tile.IsContested) continue; // contested tiles don't count until confirmed
-                prestige += 1;
+                prestige += tile.IsKeyRegion ? 2 : 1;
                 if (tile.HasYurt) prestige += 2;
             }
             PlayerPrestige[pid] = prestige;
