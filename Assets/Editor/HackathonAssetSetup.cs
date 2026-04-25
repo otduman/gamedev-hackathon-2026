@@ -22,7 +22,9 @@ public class HackathonAssetSetup : EditorWindow
         // Different KayKit packs and import settings produce different asset names.
         GameObject grassModel    = FindModelMultipleNames(new[]{ "hex_grass", "hexagon_grass", "hex_plain", "hex_ground", "grass" });
         GameObject waterModel    = FindModelMultipleNames(new[]{ "hex_water", "hexagon_water", "hex_ocean", "hex_river", "water" });
-        GameObject mountainModel = FindModelMultipleNames(new[]{ "mountain_A_grass", "hex_mountain", "hexagon_mountain", "mountain_grass", "mountain" });
+        // Only search for actual hex tile variants — NOT decoration models like mountain_A_grass.
+        // If no dedicated mountain tile exists, fall back to grass (hill decorations distinguish it visually).
+        GameObject mountainModel = FindModelMultipleNames(new[]{ "hex_mountain", "hexagon_mountain" });
         GameObject yurtModel     = FindModelMultipleNames(new[]{ "yurt", "Yurt", "structure_yurt", "building_yurt", "yurt_A", "yurt_B", "ger", "Ger" });
 
         if (grassModel == null)
@@ -91,6 +93,19 @@ public class HackathonAssetSetup : EditorWindow
         SetArray(so, "mountainPrefabs", mountainPrefab);
         so.ApplyModifiedProperties();
         Debug.Log("[Setup] Prefabs assigned to HexGridManager.");
+
+        // Directional light — without one the scene view is gray and models are unlit.
+        if (FindAnyObjectByType<Light>() == null)
+        {
+            GameObject lightObj = new GameObject("Directional Light");
+            Light light = lightObj.AddComponent<Light>();
+            light.type      = LightType.Directional;
+            light.intensity = 1.1f;
+            light.color     = new Color(1f, 0.97f, 0.88f); // warm sunlight
+            lightObj.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            Undo.RegisterCreatedObjectUndo(lightObj, "Create Directional Light");
+            Debug.Log("[Setup] Directional Light created.");
+        }
 
         Camera mainCam = Camera.main;
         if (mainCam != null && mainCam.GetComponent<CameraController>() == null)
@@ -209,13 +224,14 @@ public class HackathonAssetSetup : EditorWindow
 
         // CapsuleCollider instead of convex MeshCollider — avoids hull overlap between
         // adjacent tiles and works correctly for raycast click detection.
-        if (instance.GetComponent<Collider>() == null)
-        {
-            CapsuleCollider col = instance.AddComponent<CapsuleCollider>();
-            col.center = new Vector3(0f, 0.1f, 0f);
-            col.radius = 0.5f;
-            col.height = 0.35f;
-        }
+        // Remove any existing colliders first, then add one reliable capsule on the root.
+        foreach (Collider c in instance.GetComponentsInChildren<Collider>())
+            Object.DestroyImmediate(c);
+
+        CapsuleCollider col = instance.AddComponent<CapsuleCollider>();
+        col.center = new Vector3(0f, 0.15f, 0f);
+        col.radius = 0.9f;  // covers ~full hex face (tile is 1.73 units wide)
+        col.height = 0.6f;
 
         Tile tile = instance.GetComponent<Tile>() ?? instance.AddComponent<Tile>();
         SerializedObject tileSo = new SerializedObject(tile);

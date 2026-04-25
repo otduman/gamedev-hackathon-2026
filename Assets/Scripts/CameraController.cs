@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class CameraController : MonoBehaviour
 {
@@ -24,8 +25,8 @@ public class CameraController : MonoBehaviour
         // Hard-clamp zoom and angle — prevents stale serialized values from breaking the camera.
         minZoom       = Mathf.Clamp(minZoom, 3f, 10f);
         maxZoom       = Mathf.Clamp(maxZoom, minZoom + 5f, 40f);
-        topDownAngle   = 72f;   // civ-style tilt: 72° from horizontal
-        isometricAngle = 45f;
+        topDownAngle   = 58f;   // civ-style tilt: 58° from horizontal (~32° off vertical)
+        isometricAngle = 40f;
 
         // Always start fully zoomed out so the whole board is visible.
         _currentZoom = maxZoom;
@@ -45,6 +46,7 @@ public class CameraController : MonoBehaviour
         {
             cam.nearClipPlane = 0.1f;
             cam.farClipPlane  = 300f;
+            cam.allowMSAA = true;
         }
 
         if (HexGridManager.Instance != null)
@@ -77,20 +79,23 @@ public class CameraController : MonoBehaviour
 
     private void HandleZoom()
     {
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (Mouse.current == null) return;
+        float scroll = Mouse.current.scroll.ReadValue().y;
         if (scroll == 0f) return;
-        _currentZoom -= scroll * zoomSpeed;
+        // New Input System reports scroll in pixels (~120 per notch); normalise to old -1..1 range.
+        _currentZoom -= (scroll / 120f) * zoomSpeed;
         _currentZoom  = Mathf.Clamp(_currentZoom, minZoom, maxZoom);
         UpdateCameraTransform();
     }
 
     private void HandlePan()
     {
+        if (Keyboard.current == null) return;
         Vector3 delta = Vector3.zero;
-        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))    delta += Vector3.forward;
-        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))  delta -= Vector3.forward;
-        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) delta += Vector3.right;
-        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))  delta -= Vector3.right;
+        if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)    delta += Vector3.forward;
+        if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)  delta -= Vector3.forward;
+        if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) delta += Vector3.right;
+        if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)  delta -= Vector3.right;
         if (delta == Vector3.zero) return;
 
         Vector3 camForwardFlat = transform.forward; camForwardFlat.y = 0f; camForwardFlat.Normalize();
@@ -160,8 +165,8 @@ public class CameraController : MonoBehaviour
 
         // maxZoom is expanded to whatever the grid needs; minZoom stays as the closest scroll limit.
         float needed = Mathf.Max(zoomForH, zoomForW);
-        maxZoom      = needed * 1.2f;            // 20% breathing room — accounts for tilted view
-        _currentZoom = maxZoom;
+        maxZoom      = needed * 1.05f;
+        _currentZoom = needed * 0.55f;           // start close — player can scroll out if needed
 
         _lastFitAspect = cam.aspect;
         UpdateCameraTransform();

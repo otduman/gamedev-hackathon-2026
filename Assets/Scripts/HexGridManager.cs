@@ -102,6 +102,10 @@ public class HexGridManager : MonoBehaviour
 
         Debug.Log($"[HexGridManager] Grid generated: {Grid.Count} tiles. Fallback mode: {_usingFallback}");
         OnGridReady?.Invoke();
+        if (GetComponent<AmbientEnvironment>() == null)
+            gameObject.AddComponent<AmbientEnvironment>();
+        if (GetComponent<WaterAnimator>() == null)
+            gameObject.AddComponent<WaterAnimator>();
     }
 
     private void PlaceDecorations()
@@ -138,9 +142,22 @@ public class HexGridManager : MonoBehaviour
                 Random.Range(-0.2f, 0.2f), 0f, Random.Range(-0.2f, 0.2f));
             deco.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
 
-            // Remove any colliders on decorations so they don't block tile clicks
+            // Remove colliders so decorations don't block tile clicks.
             foreach (Collider c in deco.GetComponentsInChildren<Collider>())
                 Destroy(c);
+
+            // Make decorations semi-transparent so warriors on the tile stay visible.
+            foreach (Renderer r in deco.GetComponentsInChildren<Renderer>())
+            {
+                Material mat = new Material(r.sharedMaterial);
+                if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1);
+                if (mat.HasProperty("_ZWrite"))  mat.SetFloat("_ZWrite", 0);
+                mat.renderQueue = 3000;
+                float a = 0.5f;
+                if (mat.HasProperty("_BaseColor")) { Color c = mat.GetColor("_BaseColor"); c.a = a; mat.SetColor("_BaseColor", c); }
+                if (mat.HasProperty("_Color"))     { Color c = mat.GetColor("_Color");     c.a = a; mat.SetColor("_Color", c); }
+                r.material = mat;
+            }
         }
     }
 
@@ -171,9 +188,9 @@ public class HexGridManager : MonoBehaviour
         }
 
         CapsuleCollider col = root.AddComponent<CapsuleCollider>();
-        col.radius = hexSize * 0.48f;
-        col.height = 0.25f;
-        col.center = Vector3.zero;
+        col.radius = hexSize * 0.9f;
+        col.height = 0.6f;
+        col.center = new Vector3(0f, 0.15f, 0f);
 
         Tile tile = root.AddComponent<Tile>();
         tile.SetPrimitiveMeshRenderer(rend);
@@ -194,8 +211,9 @@ public class HexGridManager : MonoBehaviour
 
     private Vector3 CalculateHexPosition(Vector2Int hexCoords)
     {
-        float x = hexSize * Mathf.Sqrt(3f) * (hexCoords.x + hexCoords.y / 2f);
-        float z = hexSize * 1.5f * hexCoords.y;
+        const float gap = 0.96f; // slight gap between tiles to prevent clipping
+        float x = hexSize * gap * Mathf.Sqrt(3f) * (hexCoords.x + hexCoords.y / 2f);
+        float z = hexSize * gap * 1.5f * hexCoords.y;
         return new Vector3(x, 0f, z);
     }
 

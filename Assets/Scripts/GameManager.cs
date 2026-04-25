@@ -1,82 +1,65 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-public enum GameState
-{
-    Reinforce,
-    Action,
-    MigrationCheck,
-    GameOver
-}
+public enum GameState { Reinforce, Action, MigrationCheck, GameOver }
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
-    // -------------------------------------------------------------------------
-    // Public state
-    // -------------------------------------------------------------------------
-    public GameState CurrentState    { get; private set; }
+    public GameState CurrentState    { get; private set; } = GameState.Reinforce;
     public int       CurrentPlayerId { get; private set; } = 0;
+    public int[]     PlayerPrestige  = new int[2];
 
-    // Prestige per player: prestige = owned tiles + (yurt tiles * 2)
-    public int[] PlayerPrestige = new int[2];
+    private static readonly Color _attackHighlight   = new Color(1.00f, 0.20f, 0.20f, 1f);
+    private static readonly Color _migrationHighlight = new Color(0.20f, 0.90f, 0.40f, 1f);
 
-    private const int PrestigeWinThreshold = 15;
+    private Tile _selectedTile    = null;
+    private int  _moveCount       = 0;
+    private int  _reinforceLeft   = 0;
+    private bool _migrationUsed   = false;
 
-    // -------------------------------------------------------------------------
-    // Reinforce phase
-    // -------------------------------------------------------------------------
-    private int _cubesLeftToPlace = 0;
-
-    // -------------------------------------------------------------------------
-    // Action phase
-    // -------------------------------------------------------------------------
-    private Tile _selectedTile = null;
-
-    // -------------------------------------------------------------------------
-    // Migration phase
-    // -------------------------------------------------------------------------
-    private Tile _migrationSourceTile = null;
-    private bool _migrationUsed       = false;  // one move per turn
-
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
+    private List<Tile> _highlightedTiles = new List<Tile>();
 
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
-        // Subscribe BEFORE HexGridManager.Start() runs so we never miss the event.
-        // Both are on the same GameObject (or at least in the same scene Awake pass),
-        // but subscribing in Awake guarantees ordering safety.
-        HexGridManager hexGrid = GetComponent<HexGridManager>();
-        if (hexGrid == null)
-            hexGrid = FindAnyObjectByType<HexGridManager>();
+        QualitySettings.anisotropicFiltering     = AnisotropicFiltering.ForceEnable;
+        QualitySettings.antiAliasing             = 4;
+        QualitySettings.globalTextureMipmapLimit = 0;
 
-        if (hexGrid != null)
-            hexGrid.OnGridReady += InitializeGame;
-        else
-            Debug.LogError("GameManager: could not find HexGridManager to subscribe to OnGridReady.");
+        HexGridManager hexGrid = GetComponent<HexGridManager>() ?? FindAnyObjectByType<HexGridManager>();
+        if (hexGrid != null) hexGrid.OnGridReady += InitializeGame;
+        else Debug.LogError("GameManager: could not find HexGridManager.");
     }
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (Mouse.current == null) return;
+
+        if (_selectedTile != null && CurrentState == GameState.MigrationCheck)
+        {
+            float scroll = Mouse.current.scroll.ReadValue().y;
+            if (scroll != 0f)
+            {
+                int dir = scroll > 0 ? 1 : -1;
+                int max = Mathf.Max(1, _selectedTile.CubeCount / 2);
+                _moveCount = Mathf.Clamp(_moveCount + dir, 1, max);
+                ShowMigrationSelectionMessage();
+            }
+        }
+
+        if (Mouse.current.leftButton.wasPressedThisFrame)
             HandleClick();
     }
-
-    // -------------------------------------------------------------------------
-    // Grid-ready callback
-    // -------------------------------------------------------------------------
 
     private void InitializeGame()
     {
         Dictionary<Vector2Int, Tile> grid = HexGridManager.Instance.Grid;
 
-        // Collect west tiles (q <= -2) for Player 0 and east tiles (q >= 2) for Player 1.
         List<Tile> westTiles = new List<Tile>();
         List<Tile> eastTiles = new List<Tile>();
 
@@ -87,186 +70,436 @@ public class GameManager : MonoBehaviour
             else if (q >= 2) eastTiles.Add(entry.Value);
         }
 
-        AssignStartingTiles(0, westTiles, 5, 3);
-        AssignStartingTiles(1, eastTiles, 5, 3);
+        AssignStartingTiles(0, westTiles, 5);
+        AssignStartingTiles(1, eastTiles, 5);
 
-        ChangeState(GameState.Reinforce);
+        RecalculatePrestige();
+        StartReinforce();
     }
 
-    // Picks 'count' random tiles from 'candidates', claims them for 'playerId',
-    // and places 'cubesPerTile' on each.
-    private void AssignStartingTiles(int playerId, List<Tile> candidates, int count, int cubesPerTile)
+    private void AssignStartingTiles(int playerId, List<Tile> candidates, int count)
     {
-        // Shuffle in place using Fisher-Yates.
         for (int i = candidates.Count - 1; i > 0; i--)
         {
             int j = Random.Range(0, i + 1);
-            Tile tmp = candidates[i];
-            candidates[i] = candidates[j];
-            candidates[j] = tmp;
+            Tile tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
         }
 
         int assigned = 0;
         foreach (Tile tile in candidates)
         {
             if (assigned >= count) break;
-            if (tile.Terrain == TerrainType.Water) continue;
+            if (tile.Terrain == TerrainType.Water || tile.Terrain == TerrainType.Mountain) continue;
             tile.OwnerPlayerId = playerId;
-            tile.AddCubes(cubesPerTile);
+            tile.AddCubes(Random.Range(2, 5));
             tile.UpdateVisuals();
             assigned++;
         }
 
         if (assigned < count)
-            Debug.LogWarning($"GameManager: only {assigned} starting tiles found for Player {playerId} (wanted {count}).");
+            Debug.LogWarning($"GameManager: only {assigned} starting tiles for Player {playerId} (wanted {count}).");
     }
 
-    // -------------------------------------------------------------------------
-    // State machine
-    // -------------------------------------------------------------------------
-
-    public void ChangeState(GameState newState)
+    private void HandleClick()
     {
-        CurrentState = newState;
-        Debug.Log($"[GameManager] State -> {CurrentState}  (Player {CurrentPlayerId})");
+        if (CurrentState == GameState.GameOver) return;
+
+        Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+
+        Tile clicked = hit.collider.GetComponentInParent<Tile>();
+        if (clicked == null) return;
 
         switch (CurrentState)
         {
-            case GameState.Reinforce:
-                EnterReinforce();
-                break;
+            case GameState.Reinforce:      HandleReinforceClick(clicked);  break;
+            case GameState.Action:         HandleActionClick(clicked);     break;
+            case GameState.MigrationCheck: HandleMigrationClick(clicked);  break;
+        }
+    }
 
-            case GameState.Action:
-                EnterAction();
-                break;
+    // -------------------------------------------------------------------------
+    // REINFORCE
+    // -------------------------------------------------------------------------
 
-            case GameState.MigrationCheck:
-                EnterMigration();
-                break;
+    private void StartReinforce()
+    {
+        CurrentState    = GameState.Reinforce;
+        _reinforceLeft  = CalculateReinforcements(CurrentPlayerId);
+        ClearSelection();
 
-            case GameState.GameOver:
-                // UI notification is handled by CheckWinCondition before reaching here.
-                break;
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                $"REINFORCE: Place {_reinforceLeft} warrior(s) on your tiles. Click a tile to place one.");
+        }
+    }
+
+    private int CalculateReinforcements(int playerId)
+    {
+        int ownedCount = 0;
+        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
+            if (tile.OwnerPlayerId == playerId) ownedCount++;
+
+        return Mathf.Max(3, ownedCount / 3);
+    }
+
+    private void HandleReinforceClick(Tile clicked)
+    {
+        if (clicked.OwnerPlayerId != CurrentPlayerId) return;
+        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
+
+        clicked.AddCubes(1);
+        _reinforceLeft--;
+
+        if (UIManager.Instance != null)
+        {
+            if (_reinforceLeft > 0)
+                UIManager.Instance.ShowMessage($"REINFORCE: {_reinforceLeft} warrior(s) left to place.");
+            else
+                UIManager.Instance.ShowMessage("All warriors placed. Moving to Action phase...");
         }
 
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateUI();
+        if (_reinforceLeft <= 0)
+            StartAction();
     }
 
     // -------------------------------------------------------------------------
-    // Reinforce phase
+    // ACTION
     // -------------------------------------------------------------------------
 
-    private void EnterReinforce()
+    private void StartAction()
     {
-        int owned = CountOwnedTiles(CurrentPlayerId);
-        _cubesLeftToPlace = Mathf.Max(3, owned / 3);
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage($"Place {_cubesLeftToPlace} warrior(s) on your tiles.");
-
-        // If the player somehow owns no tiles (edge case), skip straight to Action.
-        if (_cubesLeftToPlace == 0)
-            ChangeState(GameState.Action);
-    }
-
-    // Called by click handling during Reinforce.
-    private void HandleReinforceClick(Tile clickedTile)
-    {
-        if (clickedTile.OwnerPlayerId != CurrentPlayerId) return;
-
-        clickedTile.AddCubes(1);
-        _cubesLeftToPlace--;
-
-        string msg = _cubesLeftToPlace > 0
-            ? $"Place {_cubesLeftToPlace} more warrior(s)."
-            : "All warriors placed!";
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage(msg);
-
-        if (_cubesLeftToPlace <= 0)
-            ChangeState(GameState.Action);
-    }
-
-    // -------------------------------------------------------------------------
-    // Action phase
-    // -------------------------------------------------------------------------
-
-    private void EnterAction()
-    {
+        CurrentState = GameState.Action;
         ClearSelection();
+
         if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage("Select your tile to attack or press End Turn.");
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+        }
     }
 
-    private void HandleActionClick(Tile clickedTile)
+    private void HandleActionClick(Tile clicked)
     {
         if (_selectedTile == null)
         {
-            // First click: select an owned tile that has more than 1 cube.
-            if (clickedTile.OwnerPlayerId == CurrentPlayerId && clickedTile.CubeCount > 1)
-            {
-                _selectedTile = clickedTile;
-                _selectedTile.SetSelected(true);
+            if (clicked.OwnerPlayerId != CurrentPlayerId) return;
+            if (clicked.CubeCount < 2) return;
+            if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
 
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Now click an adjacent enemy tile to attack.");
-            }
+            _selectedTile = clicked;
+            _selectedTile.SetSelected(true);
+            HighlightAttackTargets(_selectedTile);
+
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage(
+                    $"Selected tile with {clicked.CubeCount} warriors. Click a red enemy tile to attack.");
+            return;
         }
-        else
+
+        if (clicked == _selectedTile)
         {
-            if (clickedTile == _selectedTile)
-            {
-                // Clicking the same tile again deselects it.
-                ClearSelection();
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Deselected. Pick a tile to attack from.");
-                return;
-            }
-
-            if (clickedTile.OwnerPlayerId == CurrentPlayerId)
-            {
-                // Clicking a different own tile swaps the selection.
-                ClearSelection();
-                if (clickedTile.CubeCount > 1)
-                {
-                    _selectedTile = clickedTile;
-                    _selectedTile.SetSelected(true);
-                    if (UIManager.Instance != null)
-                        UIManager.Instance.ShowMessage("Now click an adjacent enemy tile to attack.");
-                }
-                return;
-            }
-
-            // Clicking an enemy tile: check adjacency before attacking.
-            List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates);
-            if (!neighbors.Contains(clickedTile))
-            {
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("That tile is not adjacent. Choose a neighbour.");
-                ClearSelection();
-                return;
-            }
-
-            // Execute attack.
-            int attackingDice = Mathf.Min(3, _selectedTile.CubeCount - 1);
-            if (attackingDice > 0)
-            {
-                bool conquered = CombatManager.Instance.ResolveCombat(_selectedTile, clickedTile, attackingDice);
-
-                string combatMsg = conquered
-                    ? $"Conquered! Tile taken by Clan {CurrentPlayerId + 1}."
-                    : $"Attack failed. The defenders held.";
-
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowCombatResult(combatMsg);
-
-                CheckWinCondition();
-            }
-
             ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage(
+                    "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+            return;
         }
+
+        if (clicked.OwnerPlayerId == CurrentPlayerId)
+        {
+            ClearSelection();
+            if (clicked.CubeCount >= 2 &&
+                clicked.Terrain != TerrainType.Water &&
+                clicked.Terrain != TerrainType.Mountain)
+            {
+                _selectedTile = clicked;
+                _selectedTile.SetSelected(true);
+                HighlightAttackTargets(_selectedTile);
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowMessage(
+                        $"Selected tile with {clicked.CubeCount} warriors. Click a red enemy tile to attack.");
+            }
+            else
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowMessage(
+                        "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+            }
+            return;
+        }
+
+        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain)
+        {
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Cannot attack water or mountain tiles.");
+            return;
+        }
+
+        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates);
+        if (!neighbors.Contains(clicked))
+        {
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Target must be adjacent to the selected tile.");
+            return;
+        }
+
+        ExecuteAttack(_selectedTile, clicked);
+    }
+
+    private void ExecuteAttack(Tile attacker, Tile defender)
+    {
+        int attackingDice = Mathf.Min(3, attacker.CubeCount - 1);
+
+        attacker.PlayAttackAnimation();
+        defender.PlayAttackAnimation();
+
+        bool conquered = CombatManager.Instance.ResolveCombat(attacker, defender, attackingDice);
+
+        attacker.UpdateVisuals();
+        defender.UpdateVisuals();
+
+        string result;
+        if (conquered)
+            result = $"Victory! You conquered the tile.\nAttacker used {attackingDice} dice.";
+        else
+            result = $"Battle ongoing — tile held.\nAttacker used {attackingDice} dice.";
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowCombatResult(result);
+
+        RecalculatePrestige();
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.UpdateUI();
+
+        if (CheckWinCondition()) return;
+
+        ClearSelection();
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowMessage(
+                "ACTION: Select another tile to attack, or press End Turn.");
+    }
+
+    private void HighlightAttackTargets(Tile source)
+    {
+        ClearHighlights();
+        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(source.HexCoordinates);
+        foreach (Tile neighbor in neighbors)
+        {
+            if (neighbor.OwnerPlayerId == CurrentPlayerId) continue;
+            if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
+            neighbor.SetHighlighted(true, _attackHighlight);
+            _highlightedTiles.Add(neighbor);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // MIGRATION
+    // -------------------------------------------------------------------------
+
+    private void StartMigration()
+    {
+        CurrentState    = GameState.MigrationCheck;
+        _migrationUsed  = false;
+        ClearSelection();
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "MIGRATION: Move warriors from one tile to an adjacent own tile, or press End Turn to skip.");
+        }
+    }
+
+    private void HandleMigrationClick(Tile clicked)
+    {
+        if (_migrationUsed)
+        {
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Migration already used this turn. Press End Turn.");
+            return;
+        }
+
+        if (_selectedTile == null)
+        {
+            if (clicked.OwnerPlayerId != CurrentPlayerId) return;
+            if (clicked.CubeCount < 2) return;
+            if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
+
+            _selectedTile = clicked;
+            _selectedTile.SetSelected(true);
+            _moveCount = Mathf.Max(1, clicked.CubeCount / 2);
+            HighlightMigrationTargets(_selectedTile);
+            ShowMigrationSelectionMessage();
+            return;
+        }
+
+        if (clicked == _selectedTile)
+        {
+            ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage(
+                    "MIGRATION: Move warriors from one tile to an adjacent own tile, or press End Turn to skip.");
+            return;
+        }
+
+        if (clicked.OwnerPlayerId != CurrentPlayerId)
+        {
+            ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Migration only moves to your own tiles. Select again.");
+            return;
+        }
+
+        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain)
+        {
+            ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Cannot migrate to water or mountain. Select again.");
+            return;
+        }
+
+        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates);
+        if (!neighbors.Contains(clicked))
+        {
+            ClearSelection();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage("Destination must be adjacent. Select again.");
+            return;
+        }
+
+        int count = Mathf.Clamp(_moveCount, 1, _selectedTile.CubeCount - 1);
+        _selectedTile.PlayWalkAnimation();
+        _selectedTile.RemoveCubes(count);
+        clicked.AddCubes(count);
+        clicked.UpdateVisuals();
+
+        _migrationUsed = true;
+        ClearSelection();
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowMessage($"Moved {count} warrior(s). Press End Turn to finish.");
+    }
+
+    private void HighlightMigrationTargets(Tile source)
+    {
+        ClearHighlights();
+        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(source.HexCoordinates);
+        foreach (Tile neighbor in neighbors)
+        {
+            if (neighbor.OwnerPlayerId != CurrentPlayerId) continue;
+            if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
+            neighbor.SetHighlighted(true, _migrationHighlight);
+            _highlightedTiles.Add(neighbor);
+        }
+    }
+
+    private void ShowMigrationSelectionMessage()
+    {
+        if (UIManager.Instance == null || _selectedTile == null) return;
+        int max = Mathf.Max(1, _selectedTile.CubeCount / 2);
+        UIManager.Instance.ShowMessage(
+            $"Moving {_moveCount} of {_selectedTile.CubeCount} warriors (max {max})  |  scroll to adjust  |  click adjacent own tile");
+    }
+
+    // -------------------------------------------------------------------------
+    // TURN END / WIN
+    // -------------------------------------------------------------------------
+
+    public void OnEndTurnButtonClicked()
+    {
+        if (CurrentState == GameState.Action)
+        {
+            StartMigration();
+            return;
+        }
+
+        if (CurrentState == GameState.MigrationCheck)
+        {
+            EndTurn();
+            return;
+        }
+    }
+
+    public void EndTurn()
+    {
+        ClearSelection();
+        CurrentPlayerId = CurrentPlayerId == 0 ? 1 : 0;
+        StartReinforce();
+    }
+
+    public void ChangeState(GameState s)
+    {
+        CurrentState = s;
+        if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
+    }
+
+    // -------------------------------------------------------------------------
+    // PRESTIGE / WIN CONDITION
+    // -------------------------------------------------------------------------
+
+    private void RecalculatePrestige()
+    {
+        for (int pid = 0; pid < 2; pid++)
+        {
+            int prestige = 0;
+            foreach (Tile tile in HexGridManager.Instance.Grid.Values)
+            {
+                if (tile.OwnerPlayerId != pid) continue;
+                prestige += 1;
+                if (tile.HasYurt) prestige += 2;
+            }
+            PlayerPrestige[pid] = prestige;
+        }
+    }
+
+    private bool CheckWinCondition()
+    {
+        for (int pid = 0; pid < 2; pid++)
+        {
+            int opponent = pid == 0 ? 1 : 0;
+
+            bool opponentHasNoTiles = true;
+            foreach (Tile tile in HexGridManager.Instance.Grid.Values)
+            {
+                if (tile.OwnerPlayerId == opponent) { opponentHasNoTiles = false; break; }
+            }
+
+            if (PlayerPrestige[pid] >= 15 || opponentHasNoTiles)
+            {
+                TriggerGameOver(pid);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void TriggerGameOver(int winnerId)
+    {
+        CurrentState = GameState.GameOver;
+        ClearSelection();
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowGameOver(winnerId);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // HELPERS
+    // -------------------------------------------------------------------------
+
+    private void ClearHighlights()
+    {
+        foreach (Tile tile in _highlightedTiles)
+            if (tile != null) tile.ClearHighlight();
+        _highlightedTiles.Clear();
     }
 
     private void ClearSelection()
@@ -274,216 +507,10 @@ public class GameManager : MonoBehaviour
         if (_selectedTile != null)
         {
             _selectedTile.SetSelected(false);
+            _selectedTile.UpdateVisuals();
             _selectedTile = null;
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Migration phase
-    // -------------------------------------------------------------------------
-
-    private void EnterMigration()
-    {
-        _migrationSourceTile = null;
-        _migrationUsed       = false;
-        ClearSelection();
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage("Migration: move cubes to an adjacent owned tile, or press End Turn to skip.");
-    }
-
-    private void HandleMigrationClick(Tile clickedTile)
-    {
-        if (_migrationUsed)
-        {
-            // Migration move already spent — wait for End Turn.
-            return;
-        }
-
-        if (_migrationSourceTile == null)
-        {
-            // Select source tile (must be owned and have at least 2 cubes so 1 stays).
-            if (clickedTile.OwnerPlayerId == CurrentPlayerId && clickedTile.CubeCount >= 2)
-            {
-                _migrationSourceTile = clickedTile;
-                _migrationSourceTile.SetSelected(true);
-
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Now click an adjacent owned tile to move cubes to.");
-            }
-        }
-        else
-        {
-            if (clickedTile == _migrationSourceTile)
-            {
-                // Deselect.
-                _migrationSourceTile.SetSelected(false);
-                _migrationSourceTile = null;
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Deselected. Pick a source tile for migration.");
-                return;
-            }
-
-            // Destination must be owned and adjacent.
-            if (clickedTile.OwnerPlayerId != CurrentPlayerId)
-            {
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Destination must be your own tile.");
-                return;
-            }
-
-            List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(_migrationSourceTile.HexCoordinates);
-            if (!neighbors.Contains(clickedTile))
-            {
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage("Tiles are not adjacent. Try again.");
-                _migrationSourceTile.SetSelected(false);
-                _migrationSourceTile = null;
-                return;
-            }
-
-            // Move half the cubes (rounded down), always leaving at least 1 behind.
-            int moveCount = Mathf.Max(1, _migrationSourceTile.CubeCount / 2);
-            if (moveCount >= _migrationSourceTile.CubeCount)
-                moveCount = _migrationSourceTile.CubeCount - 1;
-
-            _migrationSourceTile.RemoveCubes(moveCount);
-            clickedTile.AddCubes(moveCount);
-
-            _migrationSourceTile.SetSelected(false);
-            _migrationSourceTile = null;
-            _migrationUsed = true;
-
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage($"Moved {moveCount} warrior(s). Press End Turn.");
-
-            // Auto-end the turn after the single migration move.
-            EndTurn();
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Click dispatcher
-    // -------------------------------------------------------------------------
-
-    private void HandleClick()
-    {
-        if (CurrentState == GameState.GameOver) return;
-
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
-
-        Tile clickedTile = hit.collider.GetComponent<Tile>();
-        if (clickedTile == null) return;
-
-        switch (CurrentState)
-        {
-            case GameState.Reinforce:      HandleReinforceClick(clickedTile); break;
-            case GameState.Action:         HandleActionClick(clickedTile);    break;
-            case GameState.MigrationCheck: HandleMigrationClick(clickedTile); break;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // End Turn button (wired from UIManager)
-    // -------------------------------------------------------------------------
-
-    public void OnEndTurnButtonClicked()
-    {
-        switch (CurrentState)
-        {
-            case GameState.Action:
-                ChangeState(GameState.MigrationCheck);
-                break;
-
-            case GameState.MigrationCheck:
-                EndTurn();
-                break;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Turn end
-    // -------------------------------------------------------------------------
-
-    public void EndTurn()
-    {
-        ClearSelection();
-        if (_migrationSourceTile != null)
-        {
-            _migrationSourceTile.SetSelected(false);
-            _migrationSourceTile = null;
-        }
-
-        CurrentPlayerId = (CurrentPlayerId + 1) % 2;
-        ChangeState(GameState.Reinforce);
-    }
-
-    // -------------------------------------------------------------------------
-    // Win condition
-    // -------------------------------------------------------------------------
-
-    private void CheckWinCondition()
-    {
-        int tiles0 = 0, tiles1 = 0;
-        int yurts0 = 0, yurts1 = 0;
-
-        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-        {
-            if (tile.OwnerPlayerId == 0) { tiles0++; if (tile.HasYurt) yurts0++; }
-            else if (tile.OwnerPlayerId == 1) { tiles1++; if (tile.HasYurt) yurts1++; }
-        }
-
-        PlayerPrestige[0] = tiles0 + yurts0 * 2;
-        PlayerPrestige[1] = tiles1 + yurts1 * 2;
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateUI();
-
-        // Elimination check — player owns zero tiles.
-        if (tiles0 == 0)
-        {
-            DeclareWinner(1);
-            return;
-        }
-        if (tiles1 == 0)
-        {
-            DeclareWinner(0);
-            return;
-        }
-
-        // Prestige threshold check.
-        if (PlayerPrestige[0] >= PrestigeWinThreshold)
-        {
-            DeclareWinner(0);
-            return;
-        }
-        if (PlayerPrestige[1] >= PrestigeWinThreshold)
-        {
-            DeclareWinner(1);
-        }
-    }
-
-    private void DeclareWinner(int winningPlayerId)
-    {
-        Debug.Log($"[GameManager] Clan {winningPlayerId + 1} wins with {PlayerPrestige[winningPlayerId]} prestige!");
-        ChangeState(GameState.GameOver);
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowGameOver(winningPlayerId);
-    }
-
-    // -------------------------------------------------------------------------
-    // Utility
-    // -------------------------------------------------------------------------
-
-    private int CountOwnedTiles(int playerId)
-    {
-        int count = 0;
-        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-        {
-            if (tile.OwnerPlayerId == playerId) count++;
-        }
-        return count;
+        _moveCount = 0;
+        ClearHighlights();
     }
 }

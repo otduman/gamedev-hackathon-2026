@@ -20,45 +20,40 @@ public class Tile : MonoBehaviour
     [SerializeField] private TextMeshPro cubeCountText;
 
     private GameObject            _activeYurtInstance;
-    private List<GameObject>      _activeWarriors  = new List<GameObject>();
+    private List<GameObject>      _activeWarriors      = new List<GameObject>();
     private int                   _spawnedWarriorCount = -1;
 
     private MaterialPropertyBlock _propBlock;
-    private bool                  _isSelected = false;
-    private Color                 _baseColor  = Color.white;
+    private bool                  _isSelected     = false;
+    private bool                  _isHighlighted  = false;
+    private Color                 _highlightColor = Color.white;
+    private Color                 _baseColor      = Color.white;
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
 
     private static readonly Color _neutralTint  = Color.white;
-    private static readonly Color _player0Tint  = new Color(0.35f, 0.45f, 1.00f, 1f);
-    private static readonly Color _player1Tint  = new Color(1.00f, 0.35f, 0.35f, 1f);
+    private static readonly Color _player0Tint  = new Color(0.55f, 0.70f, 1.00f, 1f);
+    private static readonly Color _player1Tint  = new Color(1.00f, 0.55f, 0.55f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
-    private const float YurtScale       = 1.0f;
-    private const float WarriorScale    = 0.35f;
-    private const float WarriorYOffset  = -0.15f; // brings feet flush with tile surface
+    private const float YurtScale        = 1.0f;
+    private const float WarriorScale     = 0.6f;
+    private const float WarriorYOffset   = -0.15f;
     private const int   MaxShownWarriors = 5;
 
-    // Formation positions (local XZ, Y=0) for 1-5 warriors on a KayKit hex tile.
     private static readonly Vector3[][] Formations = new Vector3[][]
     {
-        // 1 — centre
         new[] { Vector3.zero },
-        // 2 — side by side
         new[] { new Vector3(-0.28f, 0f,  0.00f), new Vector3( 0.28f, 0f,  0.00f) },
-        // 3 — equilateral triangle
         new[] { new Vector3( 0.00f, 0f, -0.28f), new Vector3(-0.25f, 0f,  0.15f), new Vector3( 0.25f, 0f,  0.15f) },
-        // 4 — square
         new[] { new Vector3(-0.24f, 0f, -0.24f), new Vector3( 0.24f, 0f, -0.24f),
                 new Vector3(-0.24f, 0f,  0.24f), new Vector3( 0.24f, 0f,  0.24f) },
-        // 5 — centre + cardinal cross
         new[] { new Vector3( 0.00f, 0f,  0.00f), new Vector3( 0.00f, 0f, -0.32f),
                 new Vector3( 0.32f, 0f,  0.00f), new Vector3( 0.00f, 0f,  0.32f),
                 new Vector3(-0.32f, 0f,  0.00f) },
     };
 
-    // -------------------------------------------------------------------------
     public void Initialize(Vector2Int coords, TerrainType terrain)
     {
         HexCoordinates = coords;
@@ -78,6 +73,19 @@ public class Tile : MonoBehaviour
     public void SetHasYurt(bool value)  { HasYurt = value;   UpdateVisuals(); }
     public void SetSelected(bool sel)   { _isSelected = sel; UpdateVisuals(); }
 
+    public void SetHighlighted(bool highlighted, Color color)
+    {
+        _isHighlighted  = highlighted;
+        _highlightColor = color;
+        UpdateVisuals();
+    }
+
+    public void ClearHighlight()
+    {
+        _isHighlighted = false;
+        UpdateVisuals();
+    }
+
     public void UpdateVisuals()
     {
         ApplyTint();
@@ -85,34 +93,34 @@ public class Tile : MonoBehaviour
         UpdateYurtVisuals();
     }
 
-    // -------------------------------------------------------------------------
-    // Tint
-    // -------------------------------------------------------------------------
     private void ApplyTint()
     {
         if (meshRenderer == null) return;
         if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
         meshRenderer.GetPropertyBlock(_propBlock);
 
-        Color tint = _isSelected        ? _selectedTint
-                   : OwnerPlayerId == 0 ? _player0Tint
-                   : OwnerPlayerId == 1 ? _player1Tint
-                   : _neutralTint;
+        Color tint;
+        if (_isSelected)
+            tint = _baseColor * _selectedTint;
+        else if (_isHighlighted)
+            tint = Color.Lerp(_baseColor, _highlightColor, 0.60f);
+        else if (OwnerPlayerId == 0)
+            tint = Color.Lerp(_baseColor, _baseColor * _player0Tint, 0.55f);
+        else if (OwnerPlayerId == 1)
+            tint = Color.Lerp(_baseColor, _baseColor * _player1Tint, 0.55f);
+        else
+            tint = _baseColor;
 
-        _propBlock.SetColor(BaseColorId, _baseColor * tint);
-        _propBlock.SetColor(ColorId,     _baseColor * tint);
+        _propBlock.SetColor(BaseColorId, tint);
+        _propBlock.SetColor(ColorId,     tint);
         meshRenderer.SetPropertyBlock(_propBlock);
     }
 
-    // -------------------------------------------------------------------------
-    // Warriors
-    // -------------------------------------------------------------------------
     private void UpdateWarriorVisuals()
     {
         if (_spawnedWarriorCount == CubeCount) return;
         _spawnedWarriorCount = CubeCount;
 
-        // Destroy existing warrior instances.
         foreach (GameObject w in _activeWarriors)
             if (w != null) Destroy(w);
         _activeWarriors.Clear();
@@ -127,12 +135,8 @@ public class Tile : MonoBehaviour
         Vector3[] positions = Formations[toShow - 1];
 
         for (int i = 0; i < toShow; i++)
-        {
-            GameObject warrior = SpawnWarrior(positions[i]);
-            _activeWarriors.Add(warrior);
-        }
+            _activeWarriors.Add(SpawnWarrior(positions[i]));
 
-        // Show count label for 6+ warriors.
         if (CubeCount > MaxShownWarriors)
             ShowCountLabel(CubeCount);
         else
@@ -149,7 +153,6 @@ public class Tile : MonoBehaviour
             warrior.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             warrior.transform.localScale    = Vector3.one * WarriorScale;
 
-            // Remove colliders so warriors don't block tile click raycasts.
             foreach (Collider c in warrior.GetComponentsInChildren<Collider>(true))
                 Destroy(c);
 
@@ -157,7 +160,6 @@ public class Tile : MonoBehaviour
         }
         else
         {
-            // Fallback: coloured capsule.
             warrior = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             warrior.transform.SetParent(transform, false);
             warrior.transform.localPosition = localPos + new Vector3(0f, 0.25f, 0f);
@@ -169,18 +171,28 @@ public class Tile : MonoBehaviour
 
     private static void PlayIdleAnimation(GameObject warrior)
     {
-        // Try Mecanim Animator first.
         Animator anim = warrior.GetComponentInChildren<Animator>(true);
-        if (anim != null && anim.runtimeAnimatorController != null)
-        {
-            anim.Play(0);
-            return;
-        }
-
-        // Fallback: legacy Animation component.
+        if (anim != null && anim.runtimeAnimatorController != null) { anim.Play(0); return; }
         Animation legacyAnim = warrior.GetComponentInChildren<Animation>(true);
-        if (legacyAnim != null && legacyAnim.clip != null)
-            legacyAnim.Play();
+        if (legacyAnim != null && legacyAnim.clip != null) legacyAnim.Play();
+    }
+
+    public void PlayAttackAnimation() => StartCoroutine(TemporaryAnim(1, 1.1f));
+    public void PlayWalkAnimation()   => StartCoroutine(TemporaryAnim(2, 0.7f));
+
+    private System.Collections.IEnumerator TemporaryAnim(int stateIndex, float duration)
+    {
+        foreach (GameObject w in _activeWarriors)
+        {
+            if (w == null) continue;
+            Animator anim = w.GetComponentInChildren<Animator>(true);
+            if (anim != null && anim.runtimeAnimatorController != null &&
+                anim.runtimeAnimatorController.animationClips.Length > stateIndex)
+                anim.Play(stateIndex);
+        }
+        yield return new WaitForSeconds(duration);
+        foreach (GameObject w in _activeWarriors)
+            if (w != null) PlayIdleAnimation(w);
     }
 
     private void ShowCountLabel(int count)
@@ -196,9 +208,6 @@ public class Tile : MonoBehaviour
             cubeCountText.gameObject.SetActive(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Yurt
-    // -------------------------------------------------------------------------
     private void UpdateYurtVisuals()
     {
         if (HasYurt && _activeYurtInstance == null)
@@ -208,6 +217,7 @@ public class Tile : MonoBehaviour
                 _activeYurtInstance = Instantiate(yurtPrefab, transform);
                 _activeYurtInstance.transform.localPosition = Vector3.zero;
                 _activeYurtInstance.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                MakeSemiTransparent(_activeYurtInstance);
                 StartCoroutine(AutoScaleYurt(_activeYurtInstance));
             }
             else
@@ -226,6 +236,24 @@ public class Tile : MonoBehaviour
         {
             Destroy(_activeYurtInstance);
             _activeYurtInstance = null;
+        }
+    }
+
+    private static void MakeSemiTransparent(GameObject go, float alpha = 0.45f)
+    {
+        foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+        {
+            Material mat = new Material(r.sharedMaterial);
+            if (mat.HasProperty("_Surface"))    mat.SetFloat("_Surface", 1);
+            if (mat.HasProperty("_Blend"))      mat.SetFloat("_Blend", 0);
+            if (mat.HasProperty("_ZWrite"))     mat.SetFloat("_ZWrite", 0);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = 3000;
+            if (mat.HasProperty("_BaseColor"))
+            { Color c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c); }
+            if (mat.HasProperty("_Color"))
+            { Color c = mat.GetColor("_Color"); c.a = alpha; mat.SetColor("_Color", c); }
+            r.material = mat;
         }
     }
 
@@ -252,7 +280,6 @@ public class Tile : MonoBehaviour
         yurtGo.transform.localScale = Vector3.one * YurtScale;
     }
 
-    // -------------------------------------------------------------------------
     private static Color ReadBaseColor(Renderer r)
     {
         if (r.sharedMaterial == null) return Color.white;

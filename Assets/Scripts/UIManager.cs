@@ -38,15 +38,18 @@ public class UIManager : MonoBehaviour
     // Lifecycle
     // -------------------------------------------------------------------------
 
-    [SerializeField] private bool hudEnabled = true;
-
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
+        // Unity sometimes serialises the Canvas RectTransform with scale (0,0,0).
+        // Force it to 1 here so the HUD is always visible regardless of scene state.
+        RectTransform rt = GetComponent<RectTransform>();
+        if (rt != null) rt.localScale = Vector3.one;
+
         EnsureCanvasComponents();
-        if (hudEnabled) BuildHUD();
+        BuildHUD();
     }
 
     // Make sure the GameObject this is on has the required Canvas plumbing.
@@ -88,8 +91,8 @@ public class UIManager : MonoBehaviour
     private void BuildTopBar()
     {
         GameObject panel = CreatePanel("TopBar", gameObject,
-            new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-            new Vector2(0f, -50f), new Vector2(Screen.width, 100f));
+            new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -50f), new Vector2(0f, 100f));
 
         _playerTurnText = CreateTMPLabel("PlayerTurnText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
