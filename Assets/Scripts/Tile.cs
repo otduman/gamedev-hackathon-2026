@@ -163,7 +163,13 @@ public class Tile : MonoBehaviour
 
     private void UpdateWarriorVisuals()
     {
-        if (_spawnedWarriorCount == CubeCount) return;
+        if (_spawnedWarriorCount == CubeCount)
+        {
+            // Count unchanged — re-tint existing warriors so conquest changes their colour.
+            foreach (GameObject w in _activeWarriors)
+                if (w != null) ApplyOwnerTintToObject(w);
+            return;
+        }
         _spawnedWarriorCount = CubeCount;
 
         foreach (GameObject w in _activeWarriors)
@@ -287,6 +293,10 @@ public class Tile : MonoBehaviour
             Destroy(_activeYurtInstance);
             _activeYurtInstance = null;
         }
+
+        // Always re-apply the owner tint so a conquered yurt switches to the new clan's colour.
+        if (_activeYurtInstance != null)
+            ApplyOwnerTintToObject(_activeYurtInstance);
     }
 
     public void RegisterDecoRenderer(Renderer r)

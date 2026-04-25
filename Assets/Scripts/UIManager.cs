@@ -47,6 +47,23 @@ public class UIManager : MonoBehaviour
     private TextMeshProUGUI     _tooltipWarriorsText;
     private TextMeshProUGUI     _tooltipYurtText;
 
+    // Combat setup panel (per-attack dice selection)
+    private GameObject          _combatSetupPanel;
+    private Button[]            _atkDiceButtons;
+    private Button[]            _defDiceButtons;
+    private TextMeshProUGUI     _atkDiceLabel;
+    private TextMeshProUGUI     _defDiceLabel;
+    private int                 _selectedAtkDice;
+    private int                 _selectedDefDice;
+    private int                 _atkDiceMax;
+    private int                 _defDiceMax;
+
+    // Migration count panel
+    private GameObject          _migrationCountPanel;
+    private TextMeshProUGUI     _migrationCountText;
+    private int                 _migrationCount;
+    private int                 _migrationCountMax;
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
@@ -100,6 +117,8 @@ public class UIManager : MonoBehaviour
         BuildDiceCombatPanel();
         BuildGameOverPanel();
         BuildTooltipPanel();
+        BuildCombatSetupPanel();
+        BuildMigrationCountPanel();
     }
 
     // Top bar — turn, phase, and instruction message
@@ -288,10 +307,12 @@ public class UIManager : MonoBehaviour
         {
             switch (GameManager.Instance.CurrentState)
             {
-                case GameState.Reinforce:      _phaseText.text = "Phase: Reinforce";  break;
-                case GameState.Action:         _phaseText.text = "Phase: Action";     break;
-                case GameState.MigrationCheck: _phaseText.text = "Phase: Migration";  break;
-                case GameState.GameOver:       _phaseText.text = "Game Over";         break;
+                case GameState.Reinforce:       _phaseText.text = "Phase: Reinforce"; break;
+                case GameState.Action:          _phaseText.text = "Phase: Action";    break;
+                case GameState.CombatSetup:     _phaseText.text = "Phase: Combat";    break;
+                case GameState.MigrationCheck:  _phaseText.text = "Phase: Migration"; break;
+                case GameState.MigrationCount:  _phaseText.text = "Phase: Migration"; break;
+                case GameState.GameOver:        _phaseText.text = "Game Over";        break;
             }
         }
 
@@ -302,7 +323,11 @@ public class UIManager : MonoBehaviour
             _clan1PrestigeText.text = $"Naiman Prestige: {GameManager.Instance.PlayerPrestige[1]}";
 
         if (_endTurnButton != null)
-            _endTurnButton.interactable = GameManager.Instance.CurrentState != GameState.Reinforce;
+        {
+            // End Turn is only valid during Action or post-migration; modals own their own flow.
+            GameState s = GameManager.Instance.CurrentState;
+            _endTurnButton.interactable = s == GameState.Action || s == GameState.MigrationCheck;
+        }
     }
 
     // Updates the instruction text that guides the current player.
@@ -383,46 +408,54 @@ public class UIManager : MonoBehaviour
         const float dieSize  = 52f;
         const float dieGap   = 8f;
         const float dieStep  = dieSize + dieGap;
-        const float diceRowY = 15f;
+        const float diceRowY = 5f;
 
-        // Attacker dice — stack rightward toward centre (rightmost die is closest to centre gap)
+        // Attacker dice — highest die closest to the centre gap (so pair-0 sits next to its
+        // partner across the gap). Lower-ranked attacker dice extend leftward.
         int attackCount = result.AttackerRolls.Length;
         for (int i = 0; i < attackCount; i++)
         {
-            float x = -(dieStep * 0.5f) - (dieStep * (attackCount - 1 - i));
+            float x = -(dieStep * 0.5f) - (dieStep * i);
             SpawnDie($"AtkDie{i}", _diceCombatPanel, result.AttackerRolls[i],
                 new Vector2(x, diceRowY), attackerColor);
         }
 
-        // Defender dice — stack leftward from centre gap
+        // Defender dice — LOWEST die closest to the centre gap. Reverse pairing: attacker's
+        // highest meets defender's lowest, so they sit visually adjacent across the gap.
         int defendCount = result.DefenderRolls.Length;
         for (int i = 0; i < defendCount; i++)
         {
-            float x = (dieStep * 0.5f) + (dieStep * i);
+            float x = (dieStep * 0.5f) + (dieStep * (defendCount - 1 - i));
             SpawnDie($"DefDie{i}", _diceCombatPanel, result.DefenderRolls[i],
                 new Vector2(x, diceRowY), defenderColor);
         }
 
-        // Comparison indicators between matched pairs
-        int pairs = Mathf.Min(attackCount, defendCount);
+        // Outcome badge above each attacker die that actually participated.
+        // attackingDiceUsed excludes the discarded forest-bonus die.
+        int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : attackCount;
+        int pairs = Mathf.Min(atkUsed, defendCount);
         for (int i = 0; i < pairs; i++)
         {
-            float attackerX   = -(dieStep * 0.5f) - (dieStep * (attackCount - 1 - i));
-            float defenderX   = (dieStep * 0.5f) + (dieStep * i);
-            float indicatorX  = (attackerX + defenderX) * 0.5f;
+            int defIdx = pairs - 1 - i;
+            int atkVal = result.AttackerRolls[i];
+            int defVal = result.DefenderRolls[defIdx];
 
-            bool attackerWins = result.AttackerRolls[i] > result.DefenderRolls[i];
-            bool tied         = result.AttackerRolls[i] == result.DefenderRolls[i];
+            bool attackerWins = atkVal > defVal;
+            bool tied         = atkVal == defVal;
 
+            // Defender wins ties, so a tie shows as an attacker loss visually.
             string symbol = tied ? "=" : attackerWins ? ">" : "<";
             Color  symCol = attackerWins
-                ? new Color(0.20f, 0.85f, 0.20f)   // green — attacker wins pair
-                : new Color(0.90f, 0.20f, 0.20f);   // red   — attacker loses pair
+                ? new Color(0.20f, 0.85f, 0.20f)
+                : new Color(0.90f, 0.20f, 0.20f);
+
+            float atkX  = -(dieStep * 0.5f) - (dieStep * i);
+            float badgeY = diceRowY + dieSize * 0.5f + 14f;
 
             TextMeshProUGUI ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(indicatorX, diceRowY), new Vector2(20f, dieSize),
-                symbol, 16, FontStyles.Bold);
+                new Vector2(atkX, badgeY), new Vector2(46f, 22f),
+                $"{symbol} {defVal}", 14, FontStyles.Bold);
             ind.color = symCol;
         }
 
@@ -649,5 +682,251 @@ public class UIManager : MonoBehaviour
         tmp.alignment = TextAlignmentOptions.Center;
 
         return tmp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Combat setup panel — modal dice-count picker for both attacker and defender
+    // -------------------------------------------------------------------------
+
+    private void BuildCombatSetupPanel()
+    {
+        _combatSetupPanel = CreatePanel("CombatSetupPanel", gameObject,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(560f, 280f));
+        _combatSetupPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.10f, 0.92f);
+
+        CreateTMPLabel("Title", _combatSetupPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -22f), new Vector2(540f, 32f),
+            "Combat Setup", 22, FontStyles.Bold);
+
+        TextMeshProUGUI atkHeader = CreateTMPLabel("AtkHeader", _combatSetupPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-130f, 75f), new Vector2(220f, 24f),
+            "Attacker dice", 14, FontStyles.Bold);
+        atkHeader.color = _clan0Color;
+
+        _atkDiceButtons = new Button[3];
+        for (int i = 0; i < 3; i++)
+        {
+            int n = i + 1;
+            _atkDiceButtons[i] = CreateButton($"AtkDice{n}", _combatSetupPanel,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-180f + i * 50f, 30f), new Vector2(46f, 46f),
+                n.ToString(), _buttonColor, () => SetAtkDice(n));
+        }
+
+        _atkDiceLabel = CreateTMPLabel("AtkDiceLabel", _combatSetupPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-130f, -10f), new Vector2(220f, 22f),
+            "Selected: 0", 13, FontStyles.Normal);
+
+        TextMeshProUGUI defHeader = CreateTMPLabel("DefHeader", _combatSetupPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(130f, 75f), new Vector2(220f, 24f),
+            "Defender dice", 14, FontStyles.Bold);
+        defHeader.color = _clan1Color;
+
+        _defDiceButtons = new Button[2];
+        for (int i = 0; i < 2; i++)
+        {
+            int n = i + 1;
+            _defDiceButtons[i] = CreateButton($"DefDice{n}", _combatSetupPanel,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(80f + i * 50f, 30f), new Vector2(46f, 46f),
+                n.ToString(), _buttonColor, () => SetDefDice(n));
+        }
+
+        _defDiceLabel = CreateTMPLabel("DefDiceLabel", _combatSetupPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(130f, -10f), new Vector2(220f, 22f),
+            "Selected: 0", 13, FontStyles.Normal);
+
+        CreateButton("ResolveBtn", _combatSetupPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(-80f, 30f), new Vector2(140f, 44f),
+            "Resolve", new Color(0.55f, 0.10f, 0.10f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnCombatSetupConfirm(_selectedAtkDice, _selectedDefDice);
+            });
+
+        CreateButton("CancelBtn", _combatSetupPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(80f, 30f), new Vector2(140f, 44f),
+            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnCombatSetupCancel();
+            });
+
+        _combatSetupPanel.SetActive(false);
+    }
+
+    public void ShowCombatSetup(int maxAtk, int maxDef, string atkClan, string defClan)
+    {
+        if (_combatSetupPanel == null) return;
+        _atkDiceMax = maxAtk;
+        _defDiceMax = maxDef;
+        _selectedAtkDice = maxAtk;
+        _selectedDefDice = maxDef;
+
+        for (int i = 0; i < _atkDiceButtons.Length; i++)
+            _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
+        for (int i = 0; i < _defDiceButtons.Length; i++)
+            _defDiceButtons[i].interactable = (i + 1) <= maxDef;
+
+        UpdateAtkDiceLabel(atkClan);
+        UpdateDefDiceLabel(defClan);
+
+        _combatSetupPanel.SetActive(true);
+    }
+
+    public void HideCombatSetup()
+    {
+        if (_combatSetupPanel != null) _combatSetupPanel.SetActive(false);
+    }
+
+    private void SetAtkDice(int n) { _selectedAtkDice = n; UpdateAtkDiceLabel(null); }
+    private void SetDefDice(int n) { _selectedDefDice = n; UpdateDefDiceLabel(null); }
+
+    private string _cachedAtkClan = "Attacker";
+    private string _cachedDefClan = "Defender";
+
+    private void UpdateAtkDiceLabel(string atkClan)
+    {
+        if (atkClan != null) _cachedAtkClan = atkClan;
+        if (_atkDiceLabel != null)
+            _atkDiceLabel.text = $"{_cachedAtkClan}: {_selectedAtkDice} / {_atkDiceMax}";
+    }
+
+    private void UpdateDefDiceLabel(string defClan)
+    {
+        if (defClan != null) _cachedDefClan = defClan;
+        if (_defDiceLabel != null)
+            _defDiceLabel.text = $"{_cachedDefClan}: {_selectedDefDice} / {_defDiceMax}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Migration count panel — pick how many warriors move
+    // -------------------------------------------------------------------------
+
+    private void BuildMigrationCountPanel()
+    {
+        _migrationCountPanel = CreatePanel("MigrationCountPanel", gameObject,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(420f, 220f));
+        _migrationCountPanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.92f);
+
+        CreateTMPLabel("Title", _migrationCountPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -22f), new Vector2(400f, 28f),
+            "Migrate warriors", 18, FontStyles.Bold);
+
+        CreateButton("Minus", _migrationCountPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-110f, 15f), new Vector2(54f, 54f),
+            "-", _buttonColor, () => AdjustMigrationCount(-1));
+
+        _migrationCountText = CreateTMPLabel("Count", _migrationCountPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 15f), new Vector2(140f, 54f),
+            "1", 26, FontStyles.Bold);
+
+        CreateButton("Plus", _migrationCountPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(110f, 15f), new Vector2(54f, 54f),
+            "+", _buttonColor, () => AdjustMigrationCount(1));
+
+        CreateButton("ConfirmMig", _migrationCountPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(-70f, 30f), new Vector2(120f, 40f),
+            "Confirm", new Color(0.15f, 0.55f, 0.15f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnMigrationCountConfirm(_migrationCount);
+            });
+
+        CreateButton("CancelMig", _migrationCountPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(70f, 30f), new Vector2(120f, 40f),
+            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnMigrationCountCancel();
+            });
+
+        _migrationCountPanel.SetActive(false);
+    }
+
+    public void ShowMigrationCount(int max, int defaultCount)
+    {
+        if (_migrationCountPanel == null) return;
+        _migrationCountMax = Mathf.Max(1, max);
+        _migrationCount    = Mathf.Clamp(defaultCount, 1, _migrationCountMax);
+        UpdateMigrationCountText();
+        _migrationCountPanel.SetActive(true);
+    }
+
+    public void HideMigrationCount()
+    {
+        if (_migrationCountPanel != null) _migrationCountPanel.SetActive(false);
+    }
+
+    private void AdjustMigrationCount(int delta)
+    {
+        _migrationCount = Mathf.Clamp(_migrationCount + delta, 1, _migrationCountMax);
+        UpdateMigrationCountText();
+    }
+
+    private void UpdateMigrationCountText()
+    {
+        if (_migrationCountText != null)
+            _migrationCountText.text = $"{_migrationCount} / {_migrationCountMax}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Button factory — used by the dice/migration panels
+    // -------------------------------------------------------------------------
+
+    private Button CreateButton(string name, GameObject parent,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 sizeDelta,
+        string label, Color bgColor, System.Action onClick)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent.transform, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin        = anchorMin;
+        rt.anchorMax        = anchorMax;
+        rt.pivot            = pivot;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta        = sizeDelta;
+
+        Image img = go.AddComponent<Image>();
+        img.color = bgColor;
+
+        Button btn = go.AddComponent<Button>();
+        btn.onClick.AddListener(() => onClick?.Invoke());
+        ColorBlock cb = btn.colors;
+        cb.disabledColor = new Color(0.30f, 0.30f, 0.30f, 0.6f);
+        btn.colors = cb;
+
+        GameObject labelGo = new GameObject("Label");
+        labelGo.transform.SetParent(go.transform, false);
+        RectTransform labelRt = labelGo.AddComponent<RectTransform>();
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI tmp = labelGo.AddComponent<TextMeshProUGUI>();
+        tmp.text      = label;
+        tmp.fontSize  = 18;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.color     = _white;
+        tmp.alignment = TextAlignmentOptions.Center;
+
+        return btn;
     }
 }

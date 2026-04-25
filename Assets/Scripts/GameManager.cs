@@ -3,7 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public enum GameState { Reinforce, Action, MigrationCheck, GameOver }
+public enum GameState { Reinforce, Action, CombatSetup, MigrationCheck, MigrationCount, GameOver }
 
 public class GameManager : MonoBehaviour
 {
@@ -20,11 +20,18 @@ public class GameManager : MonoBehaviour
     private static readonly Color _yurtMoveHighlight  = new Color(1.00f, 0.80f, 0.00f, 1f);
     private static readonly Color _neutralHighlight   = new Color(0.90f, 0.85f, 0.10f, 1f);
 
-    private Tile _selectedTile    = null;
-    private Tile _hoveredTile     = null;
-    private int  _moveCount       = 0;
-    private int  _reinforceLeft   = 0;
-    private bool _migrationUsed   = false;
+    private Tile _selectedTile           = null;
+    private Tile _hoveredTile            = null;
+    private int  _moveCount              = 0;
+    private int  _reinforceLeft          = 0;
+    private bool _migrationUsed          = false;
+
+    // Pending state for the modal combat-setup panel
+    private Tile _pendingAttacker        = null;
+    private Tile _pendingDefender        = null;
+
+    // Pending destination while the migration count panel is open
+    private Tile _pendingMigrationDest   = null;
 
     // Reachable tiles from the current migration selection (BFS result)
     private Dictionary<Tile, int> _reachableTiles = new Dictionary<Tile, int>();
@@ -48,21 +55,7 @@ public class GameManager : MonoBehaviour
     private void Update()
     {
         if (Mouse.current == null) return;
-
-        if (_selectedTile != null && CurrentState == GameState.MigrationCheck && !_selectedTile.HasYurt)
-        {
-            float scroll = Mouse.current.scroll.ReadValue().y;
-            if (scroll != 0f)
-            {
-                int dir = scroll > 0 ? 1 : -1;
-                int max = Mathf.Max(1, _selectedTile.CubeCount - 1);
-                _moveCount = Mathf.Clamp(_moveCount + dir, 1, max);
-                ShowMigrationSelectionMessage();
-            }
-        }
-
         HandleHover();
-
         if (Mouse.current.leftButton.wasPressedThisFrame)
             HandleClick();
     }
@@ -219,19 +212,39 @@ public class GameManager : MonoBehaviour
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UpdateUI();
-            bool hasYurt = PlayerHasYurt(CurrentPlayerId);
-            string targetDesc = hasYurt ? "your yurt" : "any of your tiles";
+            int yurtCount = CountYurts(CurrentPlayerId);
+            string targetDesc;
+            if (yurtCount > 1)      targetDesc = $"any of your {yurtCount} yurts (split however you like)";
+            else if (yurtCount == 1) targetDesc = "your yurt";
+            else                     targetDesc = "any of your tiles";
+            string bonusNote = yurtCount > 1 ? $" — includes +{yurtCount - 1} from conquered yurt(s)" : "";
             UIManager.Instance.ShowMessage(
-                $"REINFORCE: Place {_reinforceLeft} warrior(s) on {targetDesc}. Click to place one.");
+                $"REINFORCE: Place {_reinforceLeft} warrior(s) on {targetDesc}{bonusNote}.");
         }
     }
 
     private int CalculateReinforcements(int playerId)
     {
         int ownedCount = 0;
+        int yurtCount  = 0;
         foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-            if (tile.OwnerPlayerId == playerId && !tile.IsContested) ownedCount++;
-        return Mathf.Max(3, ownedCount / 3);
+        {
+            if (tile.OwnerPlayerId != playerId) continue;
+            if (tile.IsContested) continue;
+            ownedCount++;
+            if (tile.HasYurt) yurtCount++;
+        }
+        // Each yurt grants +1 warrior per round. Both players start with +1 (their starting
+        // yurt); conquering an enemy yurt raises the bonus to +2.
+        return Mathf.Max(3, ownedCount / 3) + yurtCount;
+    }
+
+    private int CountYurts(int playerId)
+    {
+        int n = 0;
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+            if (t.HasYurt && t.OwnerPlayerId == playerId && !t.IsContested) n++;
+        return n;
     }
 
     // Highlights valid reinforce targets: yurt tiles when available, all owned tiles as fallback.
@@ -268,7 +281,7 @@ public class GameManager : MonoBehaviour
         {
             if (UIManager.Instance != null)
                 UIManager.Instance.ShowMessage(
-                    $"Warriors must be placed at your yurt. {_reinforceLeft} left to place.");
+                    $"Warriors must be placed on a yurt tile. {_reinforceLeft} left to place.");
             return;
         }
 
@@ -278,7 +291,8 @@ public class GameManager : MonoBehaviour
         if (UIManager.Instance != null)
         {
             if (_reinforceLeft > 0)
-                UIManager.Instance.ShowMessage($"REINFORCE: {_reinforceLeft} warrior(s) left to place at yurt.");
+                UIManager.Instance.ShowMessage(
+                    $"REINFORCE: {_reinforceLeft} warrior(s) left — click any of your yurts.");
             else
                 UIManager.Instance.ShowMessage("All warriors placed. Moving to Action phase...");
         }
@@ -380,7 +394,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        ExecuteAttack(_selectedTile, clicked);
+        BeginCombatSetup(_selectedTile, clicked);
     }
 
     private void ExpandIntoNeutral(Tile source, Tile target)
@@ -407,19 +421,46 @@ public class GameManager : MonoBehaviour
                 "Expanded into neutral territory. Select another tile or press End Turn.");
     }
 
-    private void ExecuteAttack(Tile attacker, Tile defender)
+    // Opens the modal combat-setup panel so each side can pick its dice count.
+    private void BeginCombatSetup(Tile attacker, Tile defender)
     {
-        int attackingDice = Mathf.Min(3, attacker.CubeCount - 1);
-        bool forestBonus  = attacker.HasForest;
+        _pendingAttacker = attacker;
+        _pendingDefender = defender;
+
+        int maxAtk = Mathf.Min(3, attacker.CubeCount - 1);
+        int maxDef = Mathf.Min(2, defender.CubeCount);
+
+        CurrentState = GameState.CombatSetup;
+        ClearHighlights();
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowCombatSetup(
+                maxAtk, maxDef,
+                ClanNames[CurrentPlayerId],
+                ClanNames[1 - CurrentPlayerId]);
+        }
+    }
+
+    // Wired to the Resolve button on the combat-setup panel.
+    public void OnCombatSetupConfirm(int atkDice, int defDice)
+    {
+        if (CurrentState != GameState.CombatSetup) return;
+        if (_pendingAttacker == null || _pendingDefender == null) return;
+
+        Tile attacker = _pendingAttacker;
+        Tile defender = _pendingDefender;
+        bool forestBonus = attacker.HasForest;
 
         attacker.PlayAttackAnimation();
         defender.PlayAttackAnimation();
 
-        bool conquered = CombatManager.Instance.ResolveCombat(attacker, defender, attackingDice, forestBonus);
+        bool conquered = CombatManager.Instance.ResolveCombat(
+            attacker, defender, atkDice, defDice, forestBonus);
 
         if (conquered)
         {
-            // Second-conquest rule: tile is contested until the player survives their next turn
             defender.OwnerPlayerId = CurrentPlayerId;
             defender.SetContested(true);
             defender.TriggerConquestPulse();
@@ -434,10 +475,17 @@ public class GameManager : MonoBehaviour
         defender.UpdateVisuals();
 
         if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideCombatSetup();
             UIManager.Instance.ShowCombatResult(
                 CombatManager.Instance.LastResult,
                 ClanNames[CurrentPlayerId],
                 ClanNames[1 - CurrentPlayerId]);
+        }
+
+        _pendingAttacker = null;
+        _pendingDefender = null;
+        CurrentState = GameState.Action;
 
         RecalculatePrestige();
         if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
@@ -448,6 +496,24 @@ public class GameManager : MonoBehaviour
 
         if (UIManager.Instance != null)
             UIManager.Instance.ShowMessage("ACTION: Select another tile to attack, or press End Turn.");
+    }
+
+    // Wired to the Cancel button on the combat-setup panel.
+    public void OnCombatSetupCancel()
+    {
+        if (CurrentState != GameState.CombatSetup) return;
+        _pendingAttacker = null;
+        _pendingDefender = null;
+        CurrentState = GameState.Action;
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideCombatSetup();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage("Combat cancelled. Select another tile or press End Turn.");
+        }
+
+        ClearSelection();
     }
 
     private void HighlightAttackTargets(Tile source)
@@ -504,7 +570,7 @@ public class GameManager : MonoBehaviour
                 HighlightYurtTargets(_selectedTile);
                 if (UIManager.Instance != null)
                     UIManager.Instance.ShowMessage(
-                        $"YURT: Click an adjacent own tile to relocate your camp.");
+                        "YURT: Click any of your tiles to relocate your camp (warriors stay behind).");
                 return;
             }
 
@@ -513,9 +579,10 @@ public class GameManager : MonoBehaviour
 
             _selectedTile = clicked;
             _selectedTile.SetSelected(true);
-            _moveCount = Mathf.Max(1, clicked.CubeCount - 1);
             HighlightMigrationTargets(_selectedTile);
-            ShowMigrationSelectionMessage();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowMessage(
+                    "Click any of your tiles to migrate warriors. You will pick how many.");
             return;
         }
 
@@ -524,7 +591,7 @@ public class GameManager : MonoBehaviour
             ClearSelection();
             if (UIManager.Instance != null)
                 UIManager.Instance.ShowMessage(
-                    "MIGRATION: Move warriors (2 MP budget) or relocate your yurt, then End Turn.");
+                    "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
             return;
         }
 
@@ -540,7 +607,7 @@ public class GameManager : MonoBehaviour
         {
             ClearSelection();
             if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Destination not reachable. Select again.");
+                UIManager.Instance.ShowMessage("Destination not reachable through your territory. Select again.");
             return;
         }
 
@@ -550,29 +617,78 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            int count = Mathf.Clamp(_moveCount, 1, _selectedTile.CubeCount - 1);
-            _selectedTile.PlayWalkAnimation();
-            _selectedTile.RemoveCubes(count);
-            clicked.AddCubes(count);
-            clicked.UpdateVisuals();
-            _migrationUsed = true;
-            ClearSelection();
-            AudioManager.Instance?.PlayMigration();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage($"Moved {count} warrior(s). Press End Turn to finish.");
+            BeginMigrationCount(clicked);
         }
+    }
+
+    // Opens the migration count panel for warrior migration.
+    private void BeginMigrationCount(Tile destination)
+    {
+        if (_selectedTile == null) return;
+
+        _pendingMigrationDest = destination;
+        int max = Mathf.Max(1, _selectedTile.CubeCount - 1);
+        CurrentState = GameState.MigrationCount;
+        ClearHighlights();
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMigrationCount(max, max);
+            UIManager.Instance.ShowMessage("Pick how many warriors to migrate, then Confirm.");
+        }
+    }
+
+    // Wired to the Confirm button on the migration count panel.
+    public void OnMigrationCountConfirm(int count)
+    {
+        if (CurrentState != GameState.MigrationCount) return;
+        if (_selectedTile == null || _pendingMigrationDest == null) return;
+
+        int actual = Mathf.Clamp(count, 1, _selectedTile.CubeCount - 1);
+        _selectedTile.PlayWalkAnimation();
+        _selectedTile.RemoveCubes(actual);
+        _pendingMigrationDest.AddCubes(actual);
+        _pendingMigrationDest.UpdateVisuals();
+
+        _migrationUsed = true;
+        AudioManager.Instance?.PlayMigration();
+
+        _pendingMigrationDest = null;
+        CurrentState = GameState.MigrationCheck;
+        ClearSelection();
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideMigrationCount();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage($"Moved {actual} warrior(s). Press End Turn to finish.");
+        }
+    }
+
+    // Wired to the Cancel button on the migration count panel.
+    public void OnMigrationCountCancel()
+    {
+        if (CurrentState != GameState.MigrationCount) return;
+        _pendingMigrationDest = null;
+        CurrentState = GameState.MigrationCheck;
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideMigrationCount();
+            UIManager.Instance.UpdateUI();
+            UIManager.Instance.ShowMessage(
+                "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
+        }
+
+        ClearSelection();
     }
 
     private void ExecuteYurtMove(Tile source, Tile destination)
     {
+        // Yurt migrates alone — soldiers stay where they are.
         source.SetHasYurt(false);
         destination.SetHasYurt(true);
-        // Always move 1 warrior with the yurt to garrison the new camp
-        if (source.CubeCount > 1)
-        {
-            source.RemoveCubes(1);
-            destination.AddCubes(1);
-        }
         source.UpdateVisuals();
         destination.UpdateVisuals();
         destination.TriggerConquestPulse();
@@ -587,33 +703,27 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // BFS through own tiles with a 2-movement-point budget.
-    // Plain/Pasture = 1 point; forest tile = 2 points.
+    // BFS through own tiles. Any tile connected to the source by a chain of own
+    // (non-water, non-mountain) tiles is reachable — no movement-point cap.
     private Dictionary<Tile, int> GetMigrationReachable(Tile source)
     {
-        const int moveBudget = 2;
         Dictionary<Tile, int> costMap = new Dictionary<Tile, int>();
-        // Use priority-aware search: process each (tile, cost) pair
-        var queue = new Queue<(Tile tile, int cost)>();
-        queue.Enqueue((source, 0));
-        var visited = new HashSet<Tile> { source };
+        Queue<Tile> queue = new Queue<Tile>();
+        queue.Enqueue(source);
+        HashSet<Tile> visited = new HashSet<Tile> { source };
 
         while (queue.Count > 0)
         {
-            var (current, cost) = queue.Dequeue();
+            Tile current = queue.Dequeue();
             foreach (Tile neighbor in HexGridManager.Instance.GetNeighbors(current.HexCoordinates))
             {
                 if (visited.Contains(neighbor)) continue;
                 if (neighbor.OwnerPlayerId != CurrentPlayerId) continue;
                 if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
 
-                int newCost = cost + neighbor.MoveCost;
-                if (newCost <= moveBudget)
-                {
-                    visited.Add(neighbor);
-                    costMap[neighbor] = newCost;
-                    queue.Enqueue((neighbor, newCost));
-                }
+                visited.Add(neighbor);
+                costMap[neighbor] = 1;
+                queue.Enqueue(neighbor);
             }
         }
         return costMap;
@@ -632,26 +742,14 @@ public class GameManager : MonoBehaviour
 
     private void HighlightYurtTargets(Tile source)
     {
+        // Yurt can relocate to any tile reachable through own territory (same BFS as warriors).
         ClearHighlights();
-        _reachableTiles = new Dictionary<Tile, int>();
-        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(source.HexCoordinates);
-        foreach (Tile n in neighbors)
+        _reachableTiles = GetMigrationReachable(source);
+        foreach (Tile target in _reachableTiles.Keys)
         {
-            if (n.OwnerPlayerId != CurrentPlayerId) continue;
-            if (n.Terrain == TerrainType.Water || n.Terrain == TerrainType.Mountain) continue;
-            _reachableTiles[n] = 1;
-            n.SetHighlighted(true, _yurtMoveHighlight);
-            _highlightedTiles.Add(n);
+            target.SetHighlighted(true, _yurtMoveHighlight);
+            _highlightedTiles.Add(target);
         }
-    }
-
-    private void ShowMigrationSelectionMessage()
-    {
-        if (UIManager.Instance == null || _selectedTile == null) return;
-        int max = Mathf.Max(1, _selectedTile.CubeCount - 1);
-        string forestNote = _selectedTile.HasForest ? " | forest=2MP" : "";
-        UIManager.Instance.ShowMessage(
-            $"Moving {_moveCount}/{_selectedTile.CubeCount} warriors  |  scroll to adjust  |  2 MP budget{forestNote}");
     }
 
     // -------------------------------------------------------------------------
