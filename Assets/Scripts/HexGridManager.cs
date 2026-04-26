@@ -235,8 +235,8 @@ public class HexGridManager : MonoBehaviour
                     int dist = HexDistanceFromOrigin(q, r);
                     if (terrain == TerrainType.Mountain)
                     {
-                        // Outer border mountains are tall; inner ones are moderate.
-                        float yScale = dist > mapRadius ? 1.5f : 1.2f;
+                        // Progressive height: inner border modest, outermost taller.
+                        float yScale = dist > mapRadius ? 1.3f : 1.0f;
                         tileGo.transform.localScale = new Vector3(1f, yScale, 1f);
                     }
 
@@ -315,22 +315,41 @@ public class HexGridManager : MonoBehaviour
             switch (tile.Terrain)
             {
                 case TerrainType.Plain:
-                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.32f; break;
+                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.20f; break;
                 case TerrainType.Mountain:
                     int dist = HexDistanceFromOrigin(tile.HexCoordinates.x, tile.HexCoordinates.y);
                     if (dist >= mapRadius)
                     {
-                        // Outer border ring — use large mountain FBX models
-                        primaryPool   = HasValidPrefab(mountainDecoPrefabs) ? mountainDecoPrefabs : hillPrefabs;
-                        secondaryPool = hillPrefabs;
-                        maxCount = 1; spawnChance = 1.0f;
+                        // Progressive border: inner ring = sparse hills,
+                        // middle = hills + some mountains, outer = mostly mountains.
+                        int ringDepth = dist - mapRadius; // 0, 1, 2
+                        if (ringDepth == 0)
+                        {
+                            // First border ring — sparse hills only
+                            primaryPool = hillPrefabs; secondaryPool = rockPrefabs;
+                            maxCount = 1; spawnChance = 0.55f;
+                        }
+                        else if (ringDepth == 1)
+                        {
+                            // Middle ring — hills with occasional mountains
+                            primaryPool = hillPrefabs;
+                            secondaryPool = HasValidPrefab(mountainDecoPrefabs) ? mountainDecoPrefabs : hillPrefabs;
+                            maxCount = 1; spawnChance = 0.75f;
+                        }
+                        else
+                        {
+                            // Outer ring — mostly mountains
+                            primaryPool = HasValidPrefab(mountainDecoPrefabs) ? mountainDecoPrefabs : hillPrefabs;
+                            secondaryPool = hillPrefabs;
+                            maxCount = 1; spawnChance = 0.85f;
+                        }
                     }
                     else
                     {
-                        // Inner mountain tiles — use hill variants
+                        // Inner mountain tiles (in the playable transition zone)
                         primaryPool   = HasValidPrefab(hillPrefabs) ? hillPrefabs : rockPrefabs;
                         secondaryPool = rockPrefabs;
-                        maxCount = 2; spawnChance = 0.85f;
+                        maxCount = 1; spawnChance = 0.65f;
                     }
                     break;
                 case TerrainType.Water:
@@ -479,8 +498,8 @@ public class HexGridManager : MonoBehaviour
 
         if (dist <= 2) return TerrainType.Plain;
 
-        // dist == 3 (transition zone)
-        if (roll < 0.72f) return TerrainType.Plain;
+        // dist == 3 (transition zone) — mostly plains with rare features
+        if (roll < 0.80f) return TerrainType.Plain;
         if (roll < 0.88f) return TerrainType.Mountain;
         return TerrainType.Water;
     }
