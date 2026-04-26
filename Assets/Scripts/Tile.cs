@@ -42,7 +42,19 @@ public class Tile : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
 
-    // Indexed by OwnerPlayerId 0-3
+    // Continent/region colours — applied to the TILE surface (Risk board style).
+    // Six regions matching GameManager.RegionNames order.
+    private static readonly Color[] RegionTints =
+    {
+        new Color(0.95f, 0.80f, 0.20f, 1f), // Uly Zhuz  — gold
+        new Color(0.95f, 0.55f, 0.15f, 1f), // Zhetysu   — orange
+        new Color(0.30f, 0.65f, 0.95f, 1f), // Orta Zhuz — sky blue
+        new Color(0.35f, 0.80f, 0.40f, 1f), // Kishi Zhuz— green
+        new Color(0.80f, 0.65f, 0.45f, 1f), // Dala      — tan/steppe
+        new Color(0.85f, 0.40f, 0.55f, 1f), // Syr Darya — dusty rose
+    };
+
+    // Player colours used ONLY for warrior/yurt pieces and border lines — not tile surfaces.
     private static readonly Color[] PlayerTints =
     {
         new Color(0.20f, 0.40f, 1.00f, 1f), // Argyn  — blue
@@ -91,7 +103,7 @@ public class Tile : MonoBehaviour
     public void RemoveCubes(int n) { CubeCount = Mathf.Max(0, CubeCount - n);     UpdateVisuals(); }
     public void SetHasYurt(bool v) { HasYurt = v;                                  UpdateVisuals(); }
     public void SetHasForest(bool v) { HasForest = v; }
-    public void SetTerritoryInfo(string name, int continentId) { TerritoryName = name; ContinentId = continentId; }
+    public void SetTerritoryInfo(string name, int continentId) { TerritoryName = name; ContinentId = continentId; UpdateVisuals(); }
     public void SetSelected(bool v)  { _isSelected = v;    UpdateVisuals(); }
     public void SetHovered(bool v)   { _isHovered  = v;    UpdateVisuals(); }
 
@@ -136,17 +148,21 @@ public class Tile : MonoBehaviour
         if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
         meshRenderer.GetPropertyBlock(_propBlock);
 
+        // Base: tint the tile by its continent colour (Risk-style — the TILE shows the region,
+        // the PIECES and BORDERS show the owner).
+        Color regionBase = ContinentId >= 0 && ContinentId < RegionTints.Length
+            ? Color.Lerp(_baseColor, RegionTints[ContinentId], 0.38f)
+            : _baseColor;
+
         Color tint;
         if (_isSelected)
-            tint = _baseColor * _selectedTint;
+            tint = regionBase * _selectedTint;
         else if (_isHighlighted)
-            tint = Color.Lerp(_baseColor, _highlightColor, 0.82f);
+            tint = Color.Lerp(regionBase, _highlightColor, 0.82f);
         else if (_isHovered)
-            tint = Color.Lerp(_baseColor, _hoverTint, 0.45f);
-        else if (OwnerPlayerId >= 0 && OwnerPlayerId < PlayerTints.Length)
-            tint = Color.Lerp(_baseColor, PlayerTints[OwnerPlayerId], 0.45f);
+            tint = Color.Lerp(regionBase, _hoverTint, 0.45f);
         else
-            tint = _baseColor;
+            tint = regionBase;
 
         if (_pulseIntensity > 0f)
             tint = Color.Lerp(tint, Color.white, _pulseIntensity);
