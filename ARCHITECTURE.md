@@ -26,15 +26,15 @@
 gamedev-hackathon-2026/
 ├── Assets/
 │   ├── Scripts/               ← ALL gameplay code lives here (9 .cs files)
-│   │   ├── GameManager.cs         (766 lines)  — Turn state machine, input, rules, missions
-│   │   ├── HexGridManager.cs      (678 lines)  — Procedural hex grid, terrain, decorations, borders
-│   │   ├── Tile.cs                 (511 lines)  — Per-tile state & visuals
-│   │   ├── UIManager.cs            (981 lines)  — Builds entire HUD programmatically
+│   │   ├── GameManager.cs         (767 lines)  — Turn state machine, input, rules, missions
+│   │   ├── HexGridManager.cs      (680 lines)  — Procedural hex grid, terrain, decorations, borders
+│   │   ├── Tile.cs                 (530 lines)  — Per-tile state & visuals
+│   │   ├── UIManager.cs           (1386 lines)  — Builds entire HUD programmatically
 │   │   ├── CombatManager.cs        (104 lines)  — Pure dice combat resolution
-│   │   ├── CameraController.cs     (167 lines)  — Civ-style zoom/pan camera
+│   │   ├── CameraController.cs     (168 lines)  — Civ-style zoom/pan camera
 │   │   ├── AudioManager.cs         (49 lines)   — MP3-based SFX playback
-│   │   ├── AmbientEnvironment.cs   (141 lines)  — Dust particles, light breathing, tile sway
-│   │   └── WaterAnimator.cs        (101 lines)  — Water tile colour lerp + Y bob
+│   │   ├── AmbientEnvironment.cs   (142 lines)  — Dust particles, light breathing, tile sway
+│   │   └── WaterAnimator.cs        (102 lines)  — Water tile colour lerp + Y bob
 │   ├── Editor/                ← Editor-only tooling (not included in builds)
 │   │   ├── HackathonAssetSetup.cs  — Menu item "Hackathon/Auto-Setup Assets"
 │   │   └── FBXImportSettings.cs    — Strips cameras/lights from imported FBX
@@ -137,7 +137,7 @@ GameState enum:
 
 ## File-by-File Reference
 
-### GameManager.cs (766 lines)
+### GameManager.cs (767 lines)
 **Role:** Central controller — turn/phase state machine, click/hover handling, selection/highlight bookkeeping, missions, win conditions.
 
 **Key fields:**
@@ -175,7 +175,7 @@ GameState enum:
 
 ---
 
-### HexGridManager.cs (678 lines)
+### HexGridManager.cs (680 lines)
 **Role:** Procedural hex grid generation, terrain assignment, decoration placement, territory naming, hex borders.
 
 **Key concepts:**
@@ -209,7 +209,7 @@ GameState enum:
 
 ---
 
-### Tile.cs (511 lines)
+### Tile.cs (530 lines)
 **Role:** Per-tile state container and visual representation.
 
 **Enums defined here:**
@@ -232,7 +232,7 @@ enum TerrainType { Plain, Mountain, Water }
 **Visual system:**
 - Tinting via `MaterialPropertyBlock` (no per-tile material clones)
 - **Tile surfaces** coloured by continent/region (Risk board style), NOT by owner
-- **Warriors and borders** coloured by owner: Argyn blue `(0.20, 0.40, 1.0)`, Naiman red `(1.0, 0.28, 0.28)`, Kerey green `(0.15, 0.80, 0.30)`, Kongrat purple `(0.75, 0.20, 0.90)`
+- **Warriors and borders** coloured by owner: Argyn green `#3a8a3e`, Naiman red `#c8402e`, Kerey blue `#2a6aaa`, Kongrat gold `#d4b044`
 - Max 3 warriors shown visually (triangle formation); count label for overflow (`TextMeshPro`)
 - Yurt: instantiated from prefab, auto-scaled via `AutoScaleYurt` coroutine
 - Decorations: tracked via `_decoRenderers` list, opacity changes on hover/occupation
@@ -269,7 +269,7 @@ int    AttackingDiceUsed  // top N dice used (excludes discarded forest die)
 
 ---
 
-### UIManager.cs (981 lines)
+### UIManager.cs (1386 lines)
 **Role:** Builds the entire HUD programmatically in `Awake()`. No UI prefabs exist.
 
 **HUD components built in `BuildHUD()`:**
@@ -311,7 +311,7 @@ int    AttackingDiceUsed  // top N dice used (excludes discarded forest die)
 
 ---
 
-### CameraController.cs (167 lines)
+### CameraController.cs (168 lines)
 **Role:** Civ-style camera with zoom-dependent tilt.
 
 - **Tilt range:** 40° (zoomed in) → 58° (zoomed out)

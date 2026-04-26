@@ -65,13 +65,14 @@ public class HexGridManager : MonoBehaviour
     };
 
     // Four clan border colours + neutral
+    // MUST match UIManager.GetClanColor() and Tile.PlayerTints.
     private static readonly Color BorderNeutral = new Color(0.10f, 0.06f, 0.02f, 0.40f);
     private static readonly Color[] BorderClanColors =
     {
-        new Color(0.20f, 0.45f, 1.00f, 1f), // Argyn   blue
-        new Color(1.00f, 0.32f, 0.18f, 1f), // Naiman  red
-        new Color(0.15f, 0.80f, 0.30f, 1f), // Kerey   green
-        new Color(0.75f, 0.20f, 0.90f, 1f), // Kongrat purple
+        new Color(0.227f, 0.541f, 0.243f, 1f), // Argyn   — kazakh green  #3a8a3e
+        new Color(0.784f, 0.251f, 0.180f, 1f), // Naiman  — timurid red   #c8402e
+        new Color(0.165f, 0.416f, 0.667f, 1f), // Kerey   — slavic blue   #2a6aaa
+        new Color(0.831f, 0.690f, 0.267f, 1f), // Kongrat  — ming gold    #d4b044
     };
 
     private static readonly Vector3[] DecoSpreadOffsets =

@@ -64,7 +64,7 @@ Axial `(q, r)` stored as `Vector2Int`. Neighbor offsets in `HexGridManager.GetNe
 `HexGridManager.DetermineTerrain` keeps inner rings (dist ≤ 2) as Plain. Distance 3 has mixed terrain (72% Plain, 16% Mountain, 12% Water). Outer ring is always Mountain (natural border). Forest is a **post-pass tag** set during `PlaceDecorations` — any Plain tile that gets tree decorations becomes a forest (`Tile.HasForest = true`, +1 attack die).
 
 ### Tile Colouring
-Tile surfaces are tinted by **continent/region** (Risk board style — gold, orange, blue, green, tan, rose). Warriors and borders are coloured by **owner** (blue, red, green, purple).
+Tile surfaces are tinted by **continent/region** (Risk board style — gold, orange, blue, green, tan, rose). Warriors and borders are coloured by **owner** (green, red, blue, gold — matching the UIManager hi-fi palette).
 
 ## Conventions
 

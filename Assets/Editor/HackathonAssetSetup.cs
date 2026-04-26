@@ -88,7 +88,6 @@ public class HackathonAssetSetup : EditorWindow
 
         SerializedObject so = new SerializedObject(gridManager);
         SetArray(so, "plainPrefabs",    grassPrefab);
-        SetArray(so, "pasturePrefabs",  grassPrefab);
         SetArray(so, "waterPrefabs",    waterPrefab);
         SetArray(so, "mountainPrefabs", mountainPrefab);
         so.ApplyModifiedProperties();

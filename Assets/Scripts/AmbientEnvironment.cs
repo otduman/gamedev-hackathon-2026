@@ -93,7 +93,7 @@ public class AmbientEnvironment : MonoBehaviour
     {
         yield return null;
 
-        GameObject[] allObjects = FindObjectsByType<GameObject>();
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
         foreach (GameObject go in allObjects)
         {
             if (!go.name.StartsWith("Tile_")) continue;
