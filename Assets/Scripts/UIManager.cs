@@ -42,6 +42,7 @@ public class UIManager : MonoBehaviour
     // Screen-level panels (for show/hide)
     private GameObject           _topBarGo;
     private GameObject           _rightPanelGo;
+    private GameObject           _hintPanelGo;
     private GameObject           _mainMenuPanel;
     private GameObject           _leaderSelectionPanel;
     private TextMeshProUGUI[]    _leaderMissionTexts;
@@ -252,6 +253,7 @@ public class UIManager : MonoBehaviour
         // Game starts at MainMenu — hide gameplay HUD until the player starts
         if (_topBarGo != null)    _topBarGo.SetActive(false);
         if (_rightPanelGo != null) _rightPanelGo.SetActive(false);
+        if (_hintPanelGo != null)  _hintPanelGo.SetActive(false);
     }
 
     public static Color GetClanColor(int playerId) => playerId switch
@@ -313,7 +315,7 @@ public class UIManager : MonoBehaviour
         _leaderNameText = CreateTMPLabel("LeaderName", leaderPanel,
             new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f),
             new Vector2(26f, 7f), new Vector2(-30f, 20f),
-            "Argyn's Turn", 13, FontStyles.Bold);
+            "Kazakh's Turn", 13, FontStyles.Bold);
         _leaderNameText.color = _cream;
         _leaderNameText.alignment = TextAlignmentOptions.Left;
 
@@ -357,15 +359,27 @@ public class UIManager : MonoBehaviour
 
         AddVerticalDivider(bar, pillsStart + 4 * (pillW + pillGap) + 4f);
 
-        // ── Hint text (flex) ──────────────────────────────────────────────
-        float hintLeft = pillsStart + 4 * (pillW + pillGap) + 14f;
-        const float endBtnW = 56f;
-        _phaseHintText = CreateTMPLabel("PhaseHint", bar,
-            new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f),
-            new Vector2(hintLeft, 0f), new Vector2(-(hintLeft + endBtnW + rightPanelW + 12f), 0f),
-            "Place your initial warriors", 11, FontStyles.Italic);
-        _phaseHintText.color = _goldDim;
-        _phaseHintText.alignment = TextAlignmentOptions.Left;
+        // ── Hint panel — floating below the top bar, anchored upper-left under leader panel ──
+        GameObject hintPanel = new GameObject("HintPanel");
+        _hintPanelGo = hintPanel;
+        hintPanel.transform.SetParent(gameObject.transform, false);
+        RectTransform hpr = hintPanel.AddComponent<RectTransform>();
+        hpr.anchorMin = new Vector2(0f, 1f); hpr.anchorMax = new Vector2(0f, 1f);
+        hpr.pivot = new Vector2(0f, 1f);
+        hpr.anchoredPosition = new Vector2(8f, -(barH + 6f));
+        hpr.sizeDelta = new Vector2(260f, 36f);
+        Image hintBg = hintPanel.AddComponent<Image>();
+        hintBg.color = new Color(0.082f, 0.059f, 0.047f, 0.88f);
+        hintBg.raycastTarget = false;
+        AddGoldBorder(hintPanel);
+
+        _phaseHintText = CreateTMPLabel("PhaseHint", hintPanel,
+            new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 0f), new Vector2(-12f, -6f),
+            "Place your initial warriors", 9, FontStyles.Italic);
+        _phaseHintText.color = _cream;
+        _phaseHintText.alignment = TextAlignmentOptions.Center;
+        _phaseHintText.textWrappingMode = TextWrappingModes.Normal;
 
         // Keep a hidden legacy text for any ShowMessage calls
         _messageText = CreateTMPLabel("MessageText_Legacy", bar,
@@ -444,15 +458,15 @@ public class UIManager : MonoBehaviour
 
         TextMeshProUGUI mTitle = CreateTMPLabel("MissionTitle", _missionPanel,
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -8f), new Vector2(0f, 16f),
-            "SECRET MISSION", 8, FontStyles.Bold);
-        mTitle.color = _goldDim;
+            new Vector2(0f, -6f), new Vector2(0f, 16f),
+            "SECRET MISSION", 9, FontStyles.Bold);
+        mTitle.color = new Color(0.25f, 0.16f, 0.04f); // dark brown — high contrast on parchment
         mTitle.alignment = TextAlignmentOptions.Center;
 
         _missionLabel = CreateTMPLabel("MissionLabel", _missionPanel,
             new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 4f), new Vector2(-12f, 48f), "", 10, FontStyles.Italic);
-        _missionLabel.color = new Color(0.12f, 0.09f, 0.06f);
+            new Vector2(0f, 4f), new Vector2(-10f, 52f), "", 11, FontStyles.Bold);
+        _missionLabel.color = new Color(0.08f, 0.05f, 0.02f); // near-black, maximum contrast
         _missionLabel.alignment = TextAlignmentOptions.Center;
 
         _missionProgress = CreateTMPLabel("MissionProgress", _missionPanel,
@@ -478,7 +492,7 @@ public class UIManager : MonoBehaviour
 
         // ── 4 empire slots ────────────────────────────────────────────────
         const float slotH = 46f, slotGap = 6f;
-        string[] defaultNames = { "Argyn", "Naiman", "Kerey", "Kongrat" };
+        string[] defaultNames = { "Kazakh", "Timurid", "Rusya", "Ming" };
         for (int i = 0; i < 4; i++)
         {
             Color fc = GetClanColor(i);
@@ -697,9 +711,10 @@ public class UIManager : MonoBehaviour
 
     private void BuildPhaseBanner()
     {
+        // Anchor top-center, sit just under the top bar — small, unobtrusive
         _phaseBannerPanel = CreatePanel("PhaseBanner", gameObject,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(520f, 86f));
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -86f), new Vector2(220f, 42f));
         // Dark semi-transparent background — slightly larger than the text
         Image bannerBg = _phaseBannerPanel.GetComponent<Image>();
         bannerBg.color = new Color(0.04f, 0.03f, 0.02f, 0.82f);
@@ -708,7 +723,7 @@ public class UIManager : MonoBehaviour
 
         _phaseBannerText = CreateTMPLabel("BannerText", _phaseBannerPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(500f, 74f), "", 38, FontStyles.Bold);
+            Vector2.zero, new Vector2(200f, 32f), "", 18, FontStyles.Bold);
         _phaseBannerText.alignment  = TextAlignmentOptions.Center;
         _phaseBannerText.color      = Color.white;
         _phaseBannerPanel.SetActive(false);
@@ -1822,6 +1837,7 @@ public class UIManager : MonoBehaviour
         if (_leaderSelectionPanel != null) _leaderSelectionPanel.SetActive(false);
         if (_topBarGo != null)            _topBarGo.SetActive(false);
         if (_rightPanelGo != null)        _rightPanelGo.SetActive(false);
+        if (_hintPanelGo != null)         _hintPanelGo.SetActive(false);
         if (_gameOverPanel != null)       _gameOverPanel.SetActive(false);
         HideTooltip();
         DismissPhaseBanner();
@@ -1837,6 +1853,7 @@ public class UIManager : MonoBehaviour
         }
         if (_topBarGo != null)   _topBarGo.SetActive(false);
         if (_rightPanelGo != null) _rightPanelGo.SetActive(false);
+        if (_hintPanelGo != null)  _hintPanelGo.SetActive(false);
         HideTooltip();
     }
 
@@ -1846,6 +1863,7 @@ public class UIManager : MonoBehaviour
         if (_leaderSelectionPanel != null) _leaderSelectionPanel.SetActive(false);
         if (_topBarGo != null)            _topBarGo.SetActive(true);
         if (_rightPanelGo != null)        _rightPanelGo.SetActive(true);
+        if (_hintPanelGo != null)         _hintPanelGo.SetActive(true);
     }
 
     private void RefreshLeaderSelection()

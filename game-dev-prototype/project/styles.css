@@ -1,0 +1,317 @@
+/* ====== Rise of Nomads — Wireframe System ====== */
+
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Kalam:wght@300;400;700&family=Special+Elite&family=Cormorant+Garamond:wght@500;600;700&display=swap');
+
+:root {
+  /* paper + ink */
+  --paper: #f6f1e6;
+  --paper-2: #efe7d4;
+  --ink: #1d1a16;
+  --ink-2: #3a342c;
+  --ink-soft: #6b6357;
+  --pencil: #2a2622;
+
+  /* faction accents (muted, sketchy) */
+  --kazakh: #4a7a3e;     /* grass green */
+  --slavic: #2c5e8a;     /* sky/steel blue */
+  --timurid: #b1402d;    /* crimson */
+  --ming: #b9892a;       /* imperial gold */
+
+  --kazakh-soft: #c7d6bd;
+  --slavic-soft: #b9cad9;
+  --timurid-soft: #e6c2b8;
+  --ming-soft: #ead7a7;
+
+  /* ornament line */
+  --orn: rgba(29,26,22,0.7);
+  --orn-soft: rgba(29,26,22,0.35);
+}
+
+html, body {
+  margin: 0;
+  font-family: 'Kalam', 'Caveat', cursive;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+/* ====== Wireframe primitives ====== */
+
+.wf {
+  position: relative;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Kalam', cursive;
+  overflow: hidden;
+  /* subtle paper texture */
+  background-image:
+    radial-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.018) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+}
+
+/* hand-drawn looking border */
+.box {
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  position: relative;
+  background: var(--paper);
+}
+.box.dashed { border-style: dashed; }
+.box.thick { border-width: 2.5px; }
+.box.double {
+  box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 3px var(--ink);
+  border: none;
+  padding: 4px;
+}
+
+/* slight rotation jitter for sketchy feel */
+.jitter-1 { transform: rotate(-0.3deg); }
+.jitter-2 { transform: rotate(0.4deg); }
+.jitter-3 { transform: rotate(-0.6deg); }
+
+/* placeholder image — stripes + monospace label */
+.ph {
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(29,26,22,0.06) 0 6px,
+      transparent 6px 14px),
+    var(--paper-2);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Special Elite', monospace;
+  font-size: 11px;
+  color: var(--ink-2);
+  text-align: center;
+  padding: 8px;
+  position: relative;
+  letter-spacing: 0.02em;
+}
+.ph::before, .ph::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ph::before {
+  background: linear-gradient(135deg, transparent calc(50% - 0.5px), rgba(29,26,22,0.3) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+}
+.ph::after {
+  background: linear-gradient(45deg, transparent calc(50% - 0.5px), rgba(29,26,22,0.3) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+}
+.ph > span {
+  position: relative;
+  z-index: 1;
+  background: var(--paper);
+  padding: 2px 6px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+/* faction tinted placeholder */
+.ph.kazakh { background-color: var(--kazakh-soft); }
+.ph.slavic { background-color: var(--slavic-soft); }
+.ph.timurid { background-color: var(--timurid-soft); }
+.ph.ming { background-color: var(--ming-soft); }
+
+/* faction swatch chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.2px solid var(--ink);
+  background: var(--paper);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: 'Kalam', cursive;
+}
+.chip .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+.chip.kazakh .dot { background: var(--kazakh); }
+.chip.slavic .dot { background: var(--slavic); }
+.chip.timurid .dot { background: var(--timurid); }
+.chip.ming .dot { background: var(--ming); }
+
+/* annotation arrow + note */
+.note {
+  font-family: 'Caveat', cursive;
+  font-size: 16px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.note.ink { color: var(--ink); }
+.tag {
+  font-family: 'Special Elite', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* faux button */
+.btn {
+  border: 1.5px solid var(--ink);
+  background: var(--paper);
+  padding: 8px 14px;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn .strap {
+  position: absolute;
+  top: -3px; bottom: -3px;
+  width: 10px;
+  border: 1.2px solid var(--ink);
+  background: repeating-linear-gradient(0deg, var(--paper-2) 0 4px, var(--paper) 4px 8px);
+  border-radius: 2px;
+}
+.btn .strap.l { left: 14px; }
+.btn .strap.r { right: 14px; }
+
+.btn.felt-kazakh { background: var(--kazakh-soft); }
+.btn.felt-slavic { background: var(--slavic-soft); }
+.btn.felt-timurid { background: var(--timurid-soft); }
+.btn.felt-ming { background: var(--ming-soft); }
+
+/* ornament strip (subtle 30%) */
+.ornament {
+  height: 10px;
+  background-image:
+    radial-gradient(circle at 8px 5px, var(--orn) 1.2px, transparent 1.8px),
+    radial-gradient(circle at 20px 5px, transparent 2.2px, var(--orn) 2.4px, transparent 3.2px);
+  background-size: 24px 10px;
+  background-repeat: repeat-x;
+  opacity: 0.55;
+}
+.ornament.thin {
+  height: 6px;
+  background-image:
+    repeating-linear-gradient(90deg,
+      var(--orn) 0 1px, transparent 1px 6px,
+      var(--orn) 6px 7px, transparent 7px 12px);
+  opacity: 0.5;
+}
+.ornament.weave {
+  height: 14px;
+  background:
+    radial-gradient(circle at 7px 7px, transparent 3px, var(--orn) 3.2px, transparent 4.2px),
+    radial-gradient(circle at 21px 7px, transparent 3px, var(--orn) 3.2px, transparent 4.2px);
+  background-size: 28px 14px;
+  opacity: 0.5;
+}
+
+/* hand-drawn underline */
+.scribble {
+  background-image: linear-gradient(transparent 88%, var(--ink) 88% 92%, transparent 92%);
+}
+
+/* dice */
+.die {
+  width: 36px; height: 36px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper);
+  display: inline-grid;
+  place-items: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 700;
+  font-size: 20px;
+  position: relative;
+}
+.die.atk { background: var(--timurid-soft); }
+.die.def { background: var(--paper-2); }
+
+/* hex tile */
+.hex {
+  width: 60px;
+  height: 68px;
+  background: var(--paper-2);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  display: grid;
+  place-items: center;
+  font-family: 'Special Elite', monospace;
+  font-size: 9px;
+  border: none;
+  position: relative;
+}
+
+/* small label */
+.label {
+  font-family: 'Special Elite', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  background: var(--paper);
+  padding: 1px 5px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.title-serif {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.h-rule {
+  height: 1.5px;
+  background: var(--ink);
+  width: 100%;
+}
+
+/* arrow connector */
+.arrow {
+  font-family: 'Caveat', cursive;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+/* sketch crosshatch fill */
+.hatch {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(29,26,22,0.18) 0 1px, transparent 1px 5px);
+}
+.hatch-dense {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(29,26,22,0.3) 0 1px, transparent 1px 3px);
+}
+
+/* dim mode for "ornament off" */
+.no-orn .ornament { display: none; }
+.no-orn .ph::before, .no-orn .ph::after { opacity: 0.5; }
+
+/* faction tint on whole HUD */
+.tint-kazakh { box-shadow: inset 0 0 0 3px var(--kazakh); }
+.tint-slavic { box-shadow: inset 0 0 0 3px var(--slavic); }
+.tint-timurid { box-shadow: inset 0 0 0 3px var(--timurid); }
+.tint-ming { box-shadow: inset 0 0 0 3px var(--ming); }
+
+/* rough sticker label */
+.sticker {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1.2px dashed var(--ink-2);
+  background: var(--paper);
+  font-family: 'Caveat', cursive;
+  font-size: 14px;
+  color: var(--ink-2);
+}

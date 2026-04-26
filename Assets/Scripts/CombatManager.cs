@@ -3,13 +3,12 @@ using System.Collections.Generic;
 
 public class CombatResult
 {
-    public int[] AttackerRolls;       // sorted descending (may include the discarded forest-bonus die)
-    public int[] DefenderRolls;       // sorted descending
+    public int[] AttackerRolls;
+    public int[] DefenderRolls;
     public int   AttackerLosses;
     public int   DefenderLosses;
     public bool  Conquered;
-    public bool  ForestBonus;         // true when attacker rolled from forest
-    public int   AttackingDiceUsed;   // top N dice used in pairings (excludes forest-bonus discard)
+    public int   AttackingDiceUsed;
 }
 
 public class CombatManager : MonoBehaviour
@@ -24,12 +23,10 @@ public class CombatManager : MonoBehaviour
         else Destroy(gameObject);
     }
 
-    // Resolves Risk-style combat. attackerForestBonus grants one extra die (best N used).
     // attackingDiceCount: 1..3 (capped to attacker.CubeCount-1).
     // defendingDiceCount: 1..2 (capped to defender.CubeCount).
     public bool ResolveCombat(Tile attackerTile, Tile defenderTile,
-                              int attackingDiceCount, int defendingDiceCount,
-                              bool attackerForestBonus = false)
+                              int attackingDiceCount, int defendingDiceCount)
     {
         if (attackerTile.CubeCount <= attackingDiceCount)
         {
@@ -40,13 +37,9 @@ public class CombatManager : MonoBehaviour
         attackingDiceCount = Mathf.Clamp(attackingDiceCount, 1, Mathf.Min(3, attackerTile.CubeCount - 1));
         defendingDiceCount = Mathf.Clamp(defendingDiceCount, 1, Mathf.Min(2, defenderTile.CubeCount));
 
-        // Forest bonus: roll one extra die, discard the lowest (list is sorted desc, so trim from end)
-        int diceToRoll = attackerForestBonus ? attackingDiceCount + 1 : attackingDiceCount;
-        List<int> allAttackRolls = RollDice(diceToRoll);
-        // Top attackingDiceCount dice are paired against the defender's sorted dice.
-        // Each pair is independent, so 1 win + 1 loss = 1 attacker loss + 1 defender loss.
-        List<int> attackRolls = allAttackRolls.GetRange(0, Mathf.Min(attackingDiceCount, allAttackRolls.Count));
-        List<int> defendRolls = RollDice(defendingDiceCount);
+        List<int> allAttackRolls = RollDice(attackingDiceCount);
+        List<int> attackRolls    = allAttackRolls;
+        List<int> defendRolls    = RollDice(defendingDiceCount);
 
         int attackerLosses = 0;
         int defenderLosses = 0;
@@ -86,7 +79,6 @@ public class CombatManager : MonoBehaviour
             AttackerLosses    = attackerLosses,
             DefenderLosses    = defenderLosses,
             Conquered         = conquered,
-            ForestBonus       = attackerForestBonus,
             AttackingDiceUsed = attackingDiceCount,
         };
 

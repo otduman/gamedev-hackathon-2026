@@ -25,10 +25,10 @@ public class GameManager : MonoBehaviour
     public GameState CurrentState    { get; private set; } = GameState.MainMenu;
     public int       CurrentPlayerId { get; private set; } = 0;
 
-    private static readonly string[] ClanNames = { "Argyn", "Naiman", "Kerey", "Kongrat" };
+    private static readonly string[] ClanNames = { "Kazakh", "Timurid", "Rusya", "Ming" };
 
     public static readonly string[] RegionNames =
-        { "Uly Zhuz", "Zhetysu", "Orta Zhuz", "Kishi Zhuz", "Dala", "Syr Darya" };
+        { "Desht-i Kipchak", "Mawarannahr", "Khorasan", "Cathay", "Rus'", "Sibir" };
 
     private static readonly int[] RegionBonuses = { 5, 5, 4, 4, 3, 3 };
 
@@ -183,6 +183,26 @@ public class GameManager : MonoBehaviour
 
     private void InitializeGame()
     {
+        // Reset every tile so a rematch starts clean — no leftover troops/yurts
+        // from the previous game.
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+        {
+            t.OwnerPlayerId = -1;
+            t.CubeCount     = 0;
+            t.SetHasYurt(false);
+            t.UpdateVisuals();
+        }
+
+        // Reset selection / phase bookkeeping so stale references don't leak in.
+        ClearSelection();
+        _placementTurn      = 0;
+        _reinforceLeft      = 0;
+        _fortifyUsed        = false;
+        _pendingAttacker    = null;
+        _pendingDefender    = null;
+        _postConquestSource = null;
+        _postConquestDest   = null;
+
         List<Tile> passable = new List<Tile>();
         foreach (Tile t in HexGridManager.Instance.Grid.Values)
             if (t.Terrain != TerrainType.Water && t.Terrain != TerrainType.Mountain)
@@ -484,12 +504,11 @@ public class GameManager : MonoBehaviour
         Tile attacker = _pendingAttacker;
         Tile defender = _pendingDefender;
         int  prevOwner = defender.OwnerPlayerId;
-        bool forestBonus = attacker.HasForest;
 
         attacker.PlayAttackAnimation();
         defender.PlayAttackAnimation();
 
-        bool conquered = CombatManager.Instance.ResolveCombat(attacker, defender, atkDice, defDice, forestBonus);
+        bool conquered = CombatManager.Instance.ResolveCombat(attacker, defender, atkDice, defDice);
 
         if (conquered)
         {

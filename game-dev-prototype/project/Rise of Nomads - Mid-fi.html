@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Rise of Nomads — Mid-fi Wireframes</title>
+<meta name="viewport" content="width=1400" />
+<link rel="stylesheet" href="midfi-styles.css" />
+<style>
+  body { background: #0e0b08; margin: 0; }
+  #canvas-root { width: 100%; height: 100vh; }
+  .dc-canvas { background: #181410 !important; }
+</style>
+<script>
+  window.MF_TWEAKS_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "ornaments": true,
+    "tooltipVisible": true,
+    "activeFaction": "kazakh",
+    "phase": "fortify"
+  }/*EDITMODE-END*/;
+</script>
+</head>
+<body>
+<div id="canvas-root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="midfi/primitives.jsx"></script>
+<script type="text/babel" src="midfi/menu.jsx"></script>
+<script type="text/babel" src="midfi/hud.jsx"></script>
+<script type="text/babel" src="midfi/screens.jsx"></script>
+<script type="text/babel" src="midfi/tweaks.jsx"></script>
+
+<script type="text/babel">
+const App = () => (
+  <>
+    <DesignCanvas title="Rise of Nomads — Mid-fi" subtitle="6 selected screens · dark wood + leather + felt + brass textures">
+      <DCSection id="menu" title="01 · Main Menu" subtitle="Asymmetric title left, menu right, 4-leader strip bottom">
+        <DCArtboard id="mf-menu" label="Menu B — asymmetric + leader strip" width={1280} height={760}>
+          <MfMenuB />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="hud" title="02 · In-Game HUD" subtitle="Top bar (leader / 4 phases / secret mission / end phase) + right empire roster + tooltip">
+        <DCArtboard id="mf-hud" label="HUD A — balanced top bar + side roster" width={1280} height={760}>
+          <MfHudA />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="combat" title="03 · Combat Dice Overlay" subtitle="Risk-style: red felt attacker mat + stone defender mat, territory names">
+        <DCArtboard id="mf-combat" label="Combat A — two physical mats" width={1280} height={760}>
+          <MfCombatA />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="tooltip" title="04 · Tile Tooltip" subtitle="Compact felt: city name + owner + warrior count">
+        <DCArtboard id="mf-tooltip" label="Tooltip A — compact felt" width={600} height={280}>
+          <MfTooltipA />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="gameover" title="05 · Game Over" subtitle="4-up scoreboard with all empires, winner highlighted">
+        <DCArtboard id="mf-gameover" label="Game Over B — 4-up scoreboard" width={1280} height={760}>
+          <MfGameOverB />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="hotseat" title="06 · Leader Select" subtitle="Side-by-side picker, P1 left / P2 right, VS center">
+        <DCArtboard id="mf-hotseat" label="Hotseat A — side-by-side picker" width={1280} height={760}>
+          <MfHotseatA />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+    <MfTweaks />
+  </>
+);
+
+ReactDOM.createRoot(document.getElementById('canvas-root')).render(<App />);
+</script>
+
+</body>
+</html>

@@ -151,6 +151,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b5ec03a50a0f8ea429a2795092ae26fe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
+  _menuBackground: {fileID: 21300000, guid: 7fcb29b55f17c475c936e89029225611, type: 3}
+  _buttonSkin: {fileID: 0}
+  _panelSkin: {fileID: 0}
+  _leaderPortraits:
+  - {fileID: 21300000, guid: deabc54f9d9fb4b0dbf839d9e758beed, type: 3}
+  - {fileID: 21300000, guid: 970ace66ecc544151b7515574adee185, type: 3}
+  - {fileID: 21300000, guid: 01c26125bea7b454ca6567c618b9ae46, type: 3}
+  - {fileID: 21300000, guid: 4e8e8e821a0144754b00fe5e9f0875e3, type: 3}
+  _victoryBackground: {fileID: 0}
 --- !u!114 &646690675
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -290,13 +299,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HexGridManager
   plainPrefabs:
-  - {fileID: 624180498957169591, guid: cd73b23256382754b90d5c0f5b855bd0, type: 3}
+  - {fileID: 8764744283974871703, guid: cd73b23256382754b90d5c0f5b855bd0, type: 3}
   mountainPrefabs:
-  - {fileID: 3000411133865593038, guid: 0ee494e3f2f814940855bbe432a2be4d, type: 3}
+  - {fileID: 1907839305454631431, guid: 0ee494e3f2f814940855bbe432a2be4d, type: 3}
   waterPrefabs:
-  - {fileID: 9197664823742971165, guid: c553665e36ae09a42b3e2374b17b03c6, type: 3}
-  treePrefabs: []
-  rockPrefabs: []
+  - {fileID: 1370377178695147553, guid: c553665e36ae09a42b3e2374b17b03c6, type: 3}
+  treePrefabs:
+  - {fileID: 919132149155446097, guid: 940b760c49d4a524d879873a0ae73945, type: 3}
+  rockPrefabs:
+  - {fileID: 919132149155446097, guid: 6ec3033eac0cafd43a4f6b82027f777b, type: 3}
   hillPrefabs: []
   mountainDecoPrefabs: []
   propPrefabs: []
@@ -429,6 +440,7 @@ MonoBehaviour:
   zoomSpeed: 3
   panSpeed: 12
   panLimit: {x: 25, y: 25}
+  rotationSpeed: 90
 --- !u!114 &1493213716
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,0 +1,238 @@
+/* ====== Rise of Nomads — Hi-fi Design System ====== */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Cinzel+Decorative:wght@400;700;900&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap');
+
+:root {
+  /* === Core palette === */
+  --bg-dark: #0c0908;
+  --bg-wood: #1a1310;
+  --bg-wood-2: #241a12;
+  --bg-leather: #2e2218;
+  --bg-leather-2: #3a2c1e;
+  --bg-felt: #1e1a14;
+  --bg-parchment: #c8b888;
+  --bg-parchment-2: #b8a878;
+  --ink: #1a150e;
+  --ink-soft: #5a4d3a;
+  --cream: #ece0c4;
+  --cream-dim: #b8a882;
+
+  /* === Metals === */
+  --gold: #c8a84e;
+  --gold-bright: #e8cc5e;
+  --gold-dim: #8a7434;
+  --gold-glow: rgba(200, 168, 78, 0.35);
+  --brass: #b08830;
+  --bronze: #8a6a28;
+  --brass-border: rgba(176, 136, 48, 0.5);
+
+  /* === Factions === */
+  --kazakh: #3a8a3e;
+  --kazakh-light: #5aaa5e;
+  --kazakh-bg: #0e2a10;
+  --kazakh-felt: #1a3a1a;
+  --kazakh-glow: rgba(58, 138, 62, 0.4);
+
+  --slavic: #2a6aaa;
+  --slavic-light: #4a8acc;
+  --slavic-bg: #0e1a2e;
+  --slavic-felt: #142a4a;
+  --slavic-glow: rgba(42, 106, 170, 0.4);
+
+  --timurid: #c8402e;
+  --timurid-light: #e06050;
+  --timurid-bg: #2e1210;
+  --timurid-felt: #4a1e18;
+  --timurid-glow: rgba(200, 64, 46, 0.4);
+
+  --ming: #d4b044;
+  --ming-light: #e8cc6e;
+  --ming-bg: #2a2210;
+  --ming-felt: #3a3018;
+  --ming-glow: rgba(212, 176, 68, 0.4);
+
+  /* === Typography === */
+  --font-title: 'Cinzel Decorative', serif;
+  --font-heading: 'Cinzel', serif;
+  --font-body: 'IM Fell English', serif;
+  --font-label: 'IM Fell English SC', serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow: hidden; background: var(--bg-dark); }
+
+/* ====== Scaling shell ====== */
+.hifi-stage {
+  width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+.hifi-canvas {
+  width: 1920px; height: 1080px;
+  transform-origin: center center;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-dark);
+}
+
+/* ====== Textures ====== */
+.t-wood {
+  background-color: var(--bg-wood);
+  background-image:
+    repeating-linear-gradient(92deg, rgba(255,255,255,0.015) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(88deg, rgba(0,0,0,0.06) 0 2px, transparent 2px 10px),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 40%, rgba(0,0,0,0.05) 100%);
+  color: var(--cream);
+}
+.t-wood-dark {
+  background-color: var(--bg-dark);
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.01) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.1) 0 2px, transparent 2px 14px);
+  color: var(--cream);
+}
+.t-leather {
+  background-color: var(--bg-leather);
+  background-image:
+    radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1.5px),
+    radial-gradient(rgba(255,255,255,0.03) 0.5px, transparent 1px);
+  background-size: 4px 4px, 7px 7px;
+  color: var(--cream);
+}
+.t-felt {
+  background-image:
+    radial-gradient(rgba(255,255,255,0.05) 0.5px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.08) 0.5px, transparent 1px);
+  background-size: 3px 3px, 5px 5px;
+  color: var(--cream);
+}
+.t-parchment {
+  background-color: var(--bg-parchment);
+  background-image:
+    radial-gradient(rgba(0,0,0,0.03) 1px, transparent 1.5px),
+    linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%, rgba(0,0,0,0.06) 100%);
+  background-size: 5px 5px, 100% 100%;
+  color: var(--ink);
+}
+
+/* faction felt tints */
+.felt-kazakh { background-color: var(--kazakh-bg); }
+.felt-slavic { background-color: var(--slavic-bg); }
+.felt-timurid { background-color: var(--timurid-bg); }
+.felt-ming { background-color: var(--ming-bg); }
+
+/* ====== Ornament lines ====== */
+.orn { opacity: 0.5; pointer-events: none; }
+.orn-gold {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim) 15%, var(--gold) 50%, var(--gold-dim) 85%, transparent);
+}
+.orn-dots {
+  height: 8px;
+  background-image: radial-gradient(circle at 6px 4px, var(--gold-dim) 1.5px, transparent 2px);
+  background-size: 16px 8px;
+  background-repeat: repeat-x;
+}
+.orn-weave {
+  height: 14px;
+  background-image:
+    radial-gradient(circle at 7px 7px, transparent 3px, var(--gold-dim) 3.3px, transparent 4.5px),
+    radial-gradient(circle at 21px 7px, transparent 3px, var(--gold-dim) 3.3px, transparent 4.5px);
+  background-size: 28px 14px;
+}
+.orn-kz {
+  height: 10px;
+  background-image:
+    linear-gradient(45deg, transparent 3px, var(--gold-dim) 3px 4px, transparent 4px),
+    linear-gradient(-45deg, transparent 3px, var(--gold-dim) 3px 4px, transparent 4px);
+  background-size: 10px 10px;
+}
+
+/* ====== Animations ====== */
+@keyframes goldPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(200,168,78,0.35), 0 0 12px var(--gold-glow); }
+  50% { box-shadow: 0 0 0 3px rgba(200,168,78,0.55), 0 0 24px var(--gold-glow); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px) rotate(-2deg); }
+  to { opacity: 1; transform: translateX(0) rotate(-1.2deg); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px) rotate(2deg); }
+  to { opacity: 1; transform: translateX(0) rotate(1deg); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes diceRoll {
+  0% { transform: rotateX(0) rotateY(0) scale(0.5); opacity: 0; }
+  30% { transform: rotateX(360deg) rotateY(180deg) scale(1.2); opacity: 1; }
+  60% { transform: rotateX(540deg) rotateY(360deg) scale(1); }
+  100% { transform: rotateX(720deg) rotateY(540deg) scale(1); opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes emberFloat {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  20% { opacity: 1; }
+  80% { opacity: 0.6; }
+  100% { opacity: 0; transform: translateY(-120px) translateX(30px) scale(0); }
+}
+
+.anim-fade { animation: fadeIn 0.4s ease-out both; }
+.anim-slide-left { animation: slideInLeft 0.5s ease-out both; }
+.anim-slide-right { animation: slideInRight 0.5s ease-out both; }
+.anim-slide-up { animation: slideUp 0.5s ease-out both; }
+.anim-pulse { animation: goldPulse 2s ease-in-out infinite; }
+.anim-float { animation: float 3s ease-in-out infinite; }
+.anim-dice { animation: diceRoll 0.8s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
+.anim-d1 { animation-delay: 0s; }
+.anim-d2 { animation-delay: 0.1s; }
+.anim-d3 { animation-delay: 0.15s; }
+.anim-d4 { animation-delay: 0.2s; }
+.anim-d5 { animation-delay: 0.3s; }
+.anim-d6 { animation-delay: 0.4s; }
+.anim-d7 { animation-delay: 0.5s; }
+.anim-d8 { animation-delay: 0.6s; }
+
+/* shimmer text */
+.shimmer-text {
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright), var(--gold), var(--gold-bright), var(--gold-dim));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
+
+/* ====== Screen transitions ====== */
+.screen-enter { animation: fadeIn 0.5s ease-out both; }
+.screen-exit { animation: fadeIn 0.3s ease-in both reverse; }
+
+/* ====== Scrollbar ====== */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+/* ====== Utility ====== */
+.no-orn .orn { display: none; }
+.abs { position: absolute; }
+.rel { position: relative; }
+.flex { display: flex; }
+.grid { display: grid; }
+.center { align-items: center; justify-content: center; }
+.pointer { cursor: pointer; }
+.transition { transition: all 0.3s ease; }

@@ -44,6 +44,7 @@ public class Tile : MonoBehaviour
     private GameObject      _countBadgeRoot;
     private Image           _countBadgeBg;
     private TextMeshProUGUI _countBadgeTMP;
+    private Material        _countBadgeTMPMat;  // cached "always-on-top" material override
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
@@ -52,12 +53,12 @@ public class Tile : MonoBehaviour
     // Six regions matching GameManager.RegionNames order.
     public static readonly Color[] RegionTints =
     {
-        new Color(0.95f, 0.80f, 0.20f, 1f), // Uly Zhuz  — gold
-        new Color(0.95f, 0.55f, 0.15f, 1f), // Zhetysu   — orange
-        new Color(0.30f, 0.65f, 0.95f, 1f), // Orta Zhuz — sky blue
-        new Color(0.35f, 0.80f, 0.40f, 1f), // Kishi Zhuz— green
-        new Color(0.80f, 0.65f, 0.45f, 1f), // Dala      — tan/steppe
-        new Color(0.85f, 0.40f, 0.55f, 1f), // Syr Darya — dusty rose
+        new Color(0.95f, 0.80f, 0.20f, 1f), // Desht-i Kipchak — gold steppe
+        new Color(0.95f, 0.55f, 0.15f, 1f), // Mawarannahr     — orange oasis
+        new Color(0.85f, 0.40f, 0.55f, 1f), // Khorasan        — dusty rose highlands
+        new Color(0.30f, 0.65f, 0.95f, 1f), // Cathay          — sky blue east
+        new Color(0.35f, 0.80f, 0.40f, 1f), // Rus'            — forest green
+        new Color(0.80f, 0.65f, 0.45f, 1f), // Sibir           — tan northern forests
     };
 
     // Player colours used ONLY for warrior/yurt pieces and border lines — not tile surfaces.
@@ -224,8 +225,9 @@ public class Tile : MonoBehaviour
             _activeWarriors.Add(w);
         }
 
-        // Always show count badge so players can read troop numbers at a glance
-        if (CubeCount > 0) ShowCountLabel(CubeCount);
+        // Only show count badge when there's more than 1 troop —
+        // a single soldier already reads as "1" without a label.
+        if (CubeCount > 1) ShowCountLabel(CubeCount);
         else               HideCountLabel();
     }
 
@@ -445,23 +447,41 @@ public class Tile : MonoBehaviour
 
     // ── World-space count badge ───────────────────────────────────────────
 
+    // Shared materials with ZTest=Always so the badge always renders on top of 3D models.
+    private static Material _alwaysOnTopUIMat;
+    private static Material GetAlwaysOnTopUIMat()
+    {
+        if (_alwaysOnTopUIMat == null)
+        {
+            Shader sh = Shader.Find("UI/Default");
+            if (sh != null)
+            {
+                _alwaysOnTopUIMat = new Material(sh);
+                _alwaysOnTopUIMat.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.Always);
+            }
+        }
+        return _alwaysOnTopUIMat;
+    }
+
     private void CreateCountBadge()
     {
         if (Terrain == TerrainType.Water) return;
 
         _countBadgeRoot = new GameObject("CountBadge");
         _countBadgeRoot.transform.SetParent(transform, false);
-        // Position above the tallest warrior model heads (warrior scale 0.6, model ~3u tall)
-        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 2.1f;
+        // Sit low — near warrior's waist/feet, not over the head/torso
+        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 0.15f;
         _countBadgeRoot.transform.localPosition = new Vector3(0f, yPos, 0f);
-        _countBadgeRoot.transform.localScale    = Vector3.one * 0.010f;
+        _countBadgeRoot.transform.localScale    = Vector3.one * 0.008f;
 
         Canvas canvas = _countBadgeRoot.AddComponent<Canvas>();
         canvas.renderMode      = RenderMode.WorldSpace;
         canvas.overrideSorting = true;
-        canvas.sortingOrder    = 99;   // draw on top of 3D geometry
+        canvas.sortingOrder    = 99;   // draw on top of other world-space canvases
         RectTransform crt = _countBadgeRoot.GetComponent<RectTransform>();
-        crt.sizeDelta = new Vector2(58f, 26f);
+        crt.sizeDelta = new Vector2(38f, 20f);
+
+        Material onTopMat = GetAlwaysOnTopUIMat();
 
         // Background pill
         GameObject bgGo = new GameObject("BG");
@@ -471,6 +491,7 @@ public class Tile : MonoBehaviour
         brt.offsetMin = brt.offsetMax = Vector2.zero;
         _countBadgeBg = bgGo.AddComponent<Image>();
         _countBadgeBg.color = new Color(0.07f, 0.05f, 0.03f, 0.88f);
+        if (onTopMat != null) _countBadgeBg.material = onTopMat;
 
         // Border outline using 4 thin images
         foreach (var (side, anMin, anMax, sz) in new (string, Vector2, Vector2, Vector2)[] {
@@ -488,6 +509,7 @@ public class Tile : MonoBehaviour
             ert.anchoredPosition = Vector2.zero; ert.sizeDelta = sz;
             Image ei = edge.AddComponent<Image>();
             ei.color = new Color(0.69f, 0.53f, 0.19f, 0.80f); // brass border
+            if (onTopMat != null) ei.material = onTopMat;
         }
 
         // Count text
@@ -497,11 +519,33 @@ public class Tile : MonoBehaviour
         trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
         trt.offsetMin = trt.offsetMax = Vector2.zero;
         _countBadgeTMP = tGo.AddComponent<TextMeshProUGUI>();
-        _countBadgeTMP.fontSize   = 16;
+        _countBadgeTMP.fontSize   = 12;
         _countBadgeTMP.fontStyle  = FontStyles.Bold;
         _countBadgeTMP.color      = new Color(0.93f, 0.88f, 0.77f);
         _countBadgeTMP.alignment  = TextAlignmentOptions.Center;
         _countBadgeTMP.raycastTarget = false;
+
+        // Force the badge text to render on top of all 3D geometry.
+        // TMP UGUI's SDF shader actually reads ZTest from "unity_GUIZTestMode"
+        // (the Canvas-pushed property) — not "_ZTestMode". Set BOTH so this
+        // works regardless of which TMP shader variant ships with the project,
+        // and assign via fontSharedMaterial so the override survives mesh
+        // rebuilds when text changes (1 → 2 → 3 etc.).
+        Material srcMat = _countBadgeTMP.fontSharedMaterial;
+        if (srcMat != null)
+        {
+            Material tmpMat = new Material(srcMat);
+            float always = (float)UnityEngine.Rendering.CompareFunction.Always;
+            if (tmpMat.HasProperty("unity_GUIZTestMode")) tmpMat.SetFloat("unity_GUIZTestMode", always);
+            if (tmpMat.HasProperty("_ZTestMode"))         tmpMat.SetFloat("_ZTestMode",         always);
+            tmpMat.renderQueue = 4000; // late in Overlay queue so it draws after world geometry
+            _countBadgeTMP.fontSharedMaterial = tmpMat;
+            _countBadgeTMPMat = tmpMat;
+        }
+
+        // Push the text slightly forward inside the canvas so it always
+        // wins against the BG within the same world-space depth.
+        tGo.transform.localPosition = new Vector3(0f, 0f, -0.1f);
 
         _countBadgeRoot.SetActive(false);
     }
@@ -519,6 +563,10 @@ public class Tile : MonoBehaviour
         if (_countBadgeTMP != null)
         {
             _countBadgeTMP.text = n.ToString();
+            // Re-apply the always-on-top material in case TMP's mesh rebuild
+            // (triggered by text change) swapped it back to a default.
+            if (_countBadgeTMPMat != null && _countBadgeTMP.fontSharedMaterial != _countBadgeTMPMat)
+                _countBadgeTMP.fontSharedMaterial = _countBadgeTMPMat;
             if (_countBadgeBg != null && OwnerPlayerId >= 0 && OwnerPlayerId < PlayerTints.Length)
             {
                 Color pc = PlayerTints[OwnerPlayerId];

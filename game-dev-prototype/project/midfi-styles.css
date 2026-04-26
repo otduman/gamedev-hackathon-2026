@@ -1,0 +1,303 @@
+/* ====== Rise of Nomads — Mid-fi Styles ====== */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Cinzel+Decorative:wght@400;700;900&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap');
+
+:root {
+  /* core palette */
+  --bg-wood: #1e1710;
+  --bg-wood-2: #2a1f14;
+  --bg-leather: #3d2e1e;
+  --bg-felt: #2c261e;
+  --bg-parchment: #d4c4a0;
+  --bg-parchment-2: #c5b48c;
+  --ink: #1a150e;
+  --ink-soft: #5a4d3a;
+  --gold: #c8a84e;
+  --gold-bright: #e8cc5e;
+  --gold-dim: #8a7434;
+  --brass: #b08830;
+  --bronze: #8a6a28;
+  --cream: #f0e6cc;
+
+  /* faction */
+  --kazakh: #3a8a3e;
+  --kazakh-bg: #1a3a1a;
+  --kazakh-felt: #2a5a2a;
+  --kazakh-soft: #4a7a3e;
+  --slavic: #2a5a9a;
+  --slavic-bg: #1a2a4a;
+  --slavic-felt: #1e3a6a;
+  --slavic-soft: #3a6a9a;
+  --timurid: #b8362a;
+  --timurid-bg: #3a1a14;
+  --timurid-felt: #6a2a1e;
+  --timurid-soft: #c84a3a;
+  --ming: #c8a84e;
+  --ming-bg: #3a2e14;
+  --ming-felt: #5a4a24;
+  --ming-soft: #d4b85e;
+
+  /* type */
+  --font-title: 'Cinzel Decorative', serif;
+  --font-heading: 'Cinzel', serif;
+  --font-body: 'IM Fell English', serif;
+  --font-label: 'IM Fell English SC', serif;
+}
+
+/* ====== Textures ====== */
+
+.tex-wood {
+  background: var(--bg-wood);
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.08) 0 2px, transparent 2px 12px),
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 50%, rgba(0,0,0,0.06) 100%);
+  color: var(--cream);
+}
+
+.tex-leather {
+  background: var(--bg-leather);
+  background-image:
+    radial-gradient(rgba(0,0,0,0.12) 1px, transparent 1.5px),
+    radial-gradient(rgba(255,255,255,0.04) 0.5px, transparent 1px);
+  background-size: 4px 4px, 7px 7px;
+  color: var(--cream);
+}
+
+.tex-felt {
+  background-image:
+    radial-gradient(rgba(255,255,255,0.06) 0.5px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.1) 0.5px, transparent 1px);
+  background-size: 3px 3px, 5px 5px;
+}
+
+.tex-parchment {
+  background: var(--bg-parchment);
+  background-image:
+    radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1.5px),
+    linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.08) 100%);
+  background-size: 5px 5px, 100% 100%;
+  color: var(--ink);
+}
+
+/* ====== Ornament borders (30% intensity) ====== */
+
+.orn-border {
+  position: relative;
+}
+.orn-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  border: 2px solid var(--gold-dim);
+  border-radius: inherit;
+  opacity: 0.5;
+}
+
+.orn-line {
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent, var(--gold-dim) 10%, var(--gold) 50%, var(--gold-dim) 90%, transparent);
+  opacity: 0.6;
+}
+.orn-line.thin { height: 1px; opacity: 0.4; }
+
+.orn-dots {
+  height: 8px;
+  background-image:
+    radial-gradient(circle at 6px 4px, var(--gold-dim) 1.5px, transparent 2px);
+  background-size: 16px 8px;
+  background-repeat: repeat-x;
+  opacity: 0.45;
+}
+
+.orn-weave {
+  height: 12px;
+  background-image:
+    radial-gradient(circle at 7px 6px, transparent 3px, var(--gold-dim) 3.2px, transparent 4.2px),
+    radial-gradient(circle at 21px 6px, transparent 3px, var(--gold-dim) 3.2px, transparent 4.2px);
+  background-size: 28px 12px;
+  opacity: 0.4;
+}
+
+/* ====== Components ====== */
+
+.mf-panel {
+  border: 1px solid rgba(200,168,78,0.3);
+  border-radius: 6px;
+  padding: 12px;
+  position: relative;
+}
+
+.mf-btn {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border: 2px solid var(--brass);
+  border-radius: 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--cream);
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+.mf-btn:hover, .mf-btn.glow {
+  box-shadow: 0 0 0 2px rgba(200,168,78,0.5), 0 0 20px rgba(200,168,78,0.35);
+  border-color: var(--gold);
+}
+
+/* rivet dots on buttons */
+.mf-btn::before, .mf-btn::after {
+  content: '●';
+  font-size: 6px;
+  color: var(--brass);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.mf-btn::before { left: 6px; }
+.mf-btn::after { right: 6px; }
+
+/* faction felt backgrounds */
+.felt-kazakh { background: var(--kazakh-bg); }
+.felt-kazakh.tex-felt { background-color: var(--kazakh-bg); }
+.felt-slavic { background: var(--slavic-bg); }
+.felt-slavic.tex-felt { background-color: var(--slavic-bg); }
+.felt-timurid { background: var(--timurid-bg); }
+.felt-timurid.tex-felt { background-color: var(--timurid-bg); }
+.felt-ming { background: var(--ming-bg); }
+.felt-ming.tex-felt { background-color: var(--ming-bg); }
+
+/* portrait frame — hammered brass */}
+.portrait-frame {
+  border: 3px solid var(--brass);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* placeholder in mid-fi */
+.mf-ph {
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0 4px, transparent 4px 10px),
+    var(--bg-leather);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-dim);
+  font-family: var(--font-label);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+/* dice */
+.mf-die {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--brass);
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--cream);
+  position: relative;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
+}
+.mf-die.atk { background: var(--timurid-bg); border-color: var(--timurid); }
+.mf-die.def { background: var(--slavic-bg); border-color: var(--slavic); }
+
+/* chip */
+.mf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--gold-dim);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--cream);
+}
+.mf-chip .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+
+.mf-label {
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+}
+
+.mf-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--cream);
+}
+
+.mf-body {
+  font-family: var(--font-body);
+  color: var(--cream);
+}
+
+/* gold glow pulse */
+@keyframes goldPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(200,168,78,0.4), 0 0 14px rgba(200,168,78,0.25); }
+  50% { box-shadow: 0 0 0 3px rgba(200,168,78,0.6), 0 0 24px rgba(200,168,78,0.45); }
+}
+.pulse-gold {
+  animation: goldPulse 2s ease-in-out infinite;
+}
+
+/* hex mini */
+.mf-hex {
+  width: 54px;
+  height: 62px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-label);
+  font-size: 9px;
+  color: var(--cream);
+}
+
+/* prestige / progress bar */
+.mf-bar {
+  height: 6px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--gold-dim);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.mf-bar-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+/* scrollbar subtle */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+/* no-orn mode */
+.no-orn .orn-border::before,
+.no-orn .orn-line,
+.no-orn .orn-dots,
+.no-orn .orn-weave { display: none; }
