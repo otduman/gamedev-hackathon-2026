@@ -64,8 +64,8 @@ public class Tile : MonoBehaviour
         new Color(0.831f, 0.690f, 0.267f, 1f), // Kongrat— ming gold     #d4b044
     };
 
-    private const float YurtScale      = 1.1f;
-    private const float WarriorScale   = 0.38f;
+    private const float YurtScale      = 1.8f;
+    private const float WarriorScale   = 0.6f;
     private const float WarriorYOffset = -0.15f;
     private const int   MaxWarriors    = 3;
     private const float MountainYLift  = 1.10f;
@@ -86,7 +86,22 @@ public class Tile : MonoBehaviour
     {
         HexCoordinates = coords;
         Terrain        = terrain;
-        if (meshRenderer != null) _baseColor = ReadBaseColor(meshRenderer);
+        if (meshRenderer != null) 
+        {
+            _baseColor = ReadBaseColor(meshRenderer);
+            
+            // Apply procedural noise to grass/hills to break up bland textures
+            if (Terrain == TerrainType.Plain || Terrain == TerrainType.Mountain)
+            {
+                float noise = Mathf.PerlinNoise(coords.x * 0.55f + 12.3f, coords.y * 0.55f + 45.6f);
+                float noiseFactor = Mathf.Lerp(0.5f, 1.5f, noise);
+                _baseColor = new Color(
+                    Mathf.Clamp01(_baseColor.r * noiseFactor),
+                    Mathf.Clamp01(_baseColor.g * noiseFactor),
+                    Mathf.Clamp01(_baseColor.b * (noiseFactor * 0.85f)), 
+                    _baseColor.a);
+            }
+        }
         UpdateVisuals();
     }
 

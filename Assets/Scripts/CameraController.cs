@@ -15,6 +15,10 @@ public class CameraController : MonoBehaviour
     [SerializeField] private float   panSpeed = 12f;
     [SerializeField] private Vector2 panLimit = new Vector2(25f, 25f);
 
+    [Header("Rotation Settings")]
+    [SerializeField] private float rotationSpeed = 90f;
+    private float _currentRotation = 0f;
+
     private Vector3 _targetPosition = Vector3.zero;
     private float   _currentZoom;
     private float   _lastFitAspect = -1f;
@@ -84,21 +88,34 @@ public class CameraController : MonoBehaviour
     private void HandlePan()
     {
         if (Keyboard.current == null) return;
+
+        // Camera Rotation (Q/E)
+        if (Keyboard.current.qKey.isPressed) _currentRotation += rotationSpeed * Time.deltaTime;
+        if (Keyboard.current.eKey.isPressed) _currentRotation -= rotationSpeed * Time.deltaTime;
+
         Vector3 delta = Vector3.zero;
         if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)    delta += Vector3.forward;
         if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)  delta -= Vector3.forward;
         if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) delta += Vector3.right;
         if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)  delta -= Vector3.right;
-        if (delta == Vector3.zero) return;
 
-        Vector3 camForwardFlat = transform.forward; camForwardFlat.y = 0f; camForwardFlat.Normalize();
-        Vector3 camRightFlat   = transform.right;   camRightFlat.y   = 0f; camRightFlat.Normalize();
+        bool moved = false;
+        if (delta != Vector3.zero)
+        {
+            Vector3 camForwardFlat = transform.forward; camForwardFlat.y = 0f; camForwardFlat.Normalize();
+            Vector3 camRightFlat   = transform.right;   camRightFlat.y   = 0f; camRightFlat.Normalize();
 
-        _targetPosition += (camForwardFlat * delta.z + camRightFlat * delta.x) * (panSpeed * Time.deltaTime);
-        _targetPosition.x = Mathf.Clamp(_targetPosition.x, -panLimit.x, panLimit.x);
-        _targetPosition.z = Mathf.Clamp(_targetPosition.z, -panLimit.y, panLimit.y);
-        _targetPosition.y = 0f;
-        UpdateCameraTransform();
+            _targetPosition += (camForwardFlat * delta.z + camRightFlat * delta.x) * (panSpeed * Time.deltaTime);
+            _targetPosition.x = Mathf.Clamp(_targetPosition.x, -panLimit.x, panLimit.x);
+            _targetPosition.z = Mathf.Clamp(_targetPosition.z, -panLimit.y, panLimit.y);
+            _targetPosition.y = 0f;
+            moved = true;
+        }
+
+        if (moved || Keyboard.current.qKey.isPressed || Keyboard.current.eKey.isPressed)
+        {
+            UpdateCameraTransform();
+        }
     }
 
     private void UpdateCameraTransform()
@@ -110,7 +127,11 @@ public class CameraController : MonoBehaviour
         float tanAngle       = Mathf.Tan(Mathf.Max(angleRad, 0.01f));
         float horizontalDist = _currentZoom / tanAngle;
 
-        transform.position = _targetPosition + new Vector3(0f, _currentZoom, -horizontalDist);
+        // Apply orbital rotation around the vertical Y-axis
+        Quaternion rotation = Quaternion.Euler(0f, _currentRotation, 0f);
+        Vector3 offset = rotation * new Vector3(0f, _currentZoom, -horizontalDist);
+
+        transform.position = _targetPosition + offset;
         transform.LookAt(_targetPosition);
     }
 

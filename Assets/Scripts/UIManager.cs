@@ -167,18 +167,34 @@ public class UIManager : MonoBehaviour
 
     private static void EnsureEventSystem()
     {
-        if (FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() != null) return;
+        var existing = FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>();
+        GameObject esGo;
+        if (existing != null)
+        {
+            esGo = existing.gameObject;
+        }
+        else
+        {
+            esGo = new GameObject("EventSystem");
+            DontDestroyOnLoad(esGo);
+            esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
+        }
 
-        GameObject esGo = new GameObject("EventSystem");
-        DontDestroyOnLoad(esGo);
-        esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
-
-        // The project uses the new Input System — add its UI module directly.
-        // StandaloneInputModule does NOT work when the new Input System is active.
 #if ENABLE_INPUT_SYSTEM
+        var standalone = esGo.GetComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        if (standalone != null) DestroyImmediate(standalone);
+
+        var isModule = esGo.GetComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+        if (isModule != null)
+        {
+            // If the module exists but has a broken asset reference, it won't work.
+            // Recreating it forces it to generate default implicit actions.
+            DestroyImmediate(isModule);
+        }
         esGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
 #else
-        esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        if (esGo.GetComponent<UnityEngine.EventSystems.StandaloneInputModule>() == null)
+            esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
 #endif
     }
 

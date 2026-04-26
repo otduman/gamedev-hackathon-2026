@@ -86,6 +86,13 @@ public class GameManager : MonoBehaviour
 
     private void HandleHover()
     {
+        if (UnityEngine.EventSystems.EventSystem.current != null && 
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        {
+            if (_hoveredTile != null) { _hoveredTile.SetHovered(false); UIManager.Instance?.HideTooltip(); _hoveredTile = null; }
+            return;
+        }
+
         Ray  ray      = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
         Tile newHover = null;
         if (Physics.Raycast(ray, out RaycastHit hit))
@@ -101,6 +108,10 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState == GameState.GameOver) return;
         if (_waitingForCount) return; // count panel is open — ignore tile clicks
+
+        if (UnityEngine.EventSystems.EventSystem.current != null && 
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
+
         Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
         if (!Physics.Raycast(ray, out RaycastHit hit)) return;
         Tile clicked = hit.collider.GetComponentInParent<Tile>();
@@ -453,20 +464,29 @@ public class GameManager : MonoBehaviour
         _pendingAttacker = null;
         _pendingDefender = null;
 
+        StartCoroutine(HandlePostCombatRoutine(conquered, prevOwner, attacker, defender));
+    }
+
+    private System.Collections.IEnumerator HandlePostCombatRoutine(bool conquered, int prevOwner, Tile attacker, Tile defender)
+    {
+        // Wait for the dice animation to finish (approx 4.2 seconds)
+        yield return new WaitForSeconds(4.2f);
+
         if (conquered)
         {
             bool win = CheckPlayerEliminated(prevOwner) || CheckWinCondition();
-            if (win) return;
+            if (win) yield break;
             _postConquestSource = attacker;
             _postConquestDest   = defender;
             BeginPostConquestMove();
-            return;
         }
-
-        ClearSelection();
-        CurrentState = GameState.Attack;
-        UIManager.Instance?.UpdateUI();
-        UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+        else
+        {
+            ClearSelection();
+            CurrentState = GameState.Attack;
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+        }
     }
 
     public void OnCombatSetupCancel()

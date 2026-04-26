@@ -28,6 +28,9 @@ public class HexGridManager : MonoBehaviour
     [Header("Mountain Border Decorations (outer ring)")]
     [SerializeField] private GameObject[] mountainDecoPrefabs;
 
+    [Header("Props (small thematic items)")]
+    [SerializeField] private GameObject[] propPrefabs;
+
     [Header("Grid Settings")]
     [SerializeField] private int   mapRadius = 4;
     [SerializeField] private float hexSize   = 1.0f;
@@ -135,7 +138,6 @@ public class HexGridManager : MonoBehaviour
             treePrefabs = EditorLoadAll(
                 nat + "trees_A_medium.fbx",
                 nat + "trees_A_small.fbx",
-                nat + "trees_A_cut.fbx",
                 nat + "tree_single_A.fbx");
 
         if (!HasValidPrefab(rockPrefabs))
@@ -166,6 +168,15 @@ public class HexGridManager : MonoBehaviour
                 nat + "mountain_C.fbx",
                 nat + "mountain_C_grass.fbx",
                 nat + "mountain_C_grass_trees.fbx");
+                
+        const string prop = "Assets/KayKit/fbx(unity)/decoration/props/";
+        if (!HasValidPrefab(propPrefabs))
+            propPrefabs = EditorLoadAll(
+                prop + "bucket_arrows.fbx",
+                prop + "sack.fbx",
+                prop + "target.fbx",
+                prop + "tent.fbx",
+                prop + "weaponrack.fbx");
 #endif
     }
 
@@ -196,6 +207,7 @@ public class HexGridManager : MonoBehaviour
         AppendArray(sb, "rockPrefabs          (rock scatter on plains)", rockPrefabs);
         AppendArray(sb, "hillPrefabs          (hill deco on inner mountains)", hillPrefabs);
         AppendArray(sb, "mountainDecoPrefabs  (large mountain FBX on outer border ring)", mountainDecoPrefabs);
+        AppendArray(sb, "propPrefabs          (small thematic props on plains)", propPrefabs);
         Debug.Log(sb.ToString());
     }
 
@@ -315,7 +327,15 @@ public class HexGridManager : MonoBehaviour
             switch (tile.Terrain)
             {
                 case TerrainType.Plain:
-                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.20f; break;
+                    if (Random.value < 0.20f && HasValidPrefab(propPrefabs))
+                    {
+                        primaryPool = propPrefabs; secondaryPool = rockPrefabs; maxCount = 2; spawnChance = 0.75f;
+                    }
+                    else
+                    {
+                        primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 2; spawnChance = 0.55f;
+                    }
+                    break;
                 case TerrainType.Mountain:
                     int dist = HexDistanceFromOrigin(tile.HexCoordinates.x, tile.HexCoordinates.y);
                     if (dist >= mapRadius)
@@ -382,7 +402,12 @@ public class HexGridManager : MonoBehaviour
                 GameObject deco = Instantiate(prefab, tile.transform);
                 deco.transform.localPosition = offsets[i % offsets.Count] + jitter;
                 deco.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-                deco.transform.localScale    = Vector3.one * Random.Range(0.85f, 1.15f);
+                
+                if (tilePool == propPrefabs)
+                    deco.transform.localScale = Vector3.one * Random.Range(0.18f, 0.28f);
+                else
+                    deco.transform.localScale = Vector3.one * Random.Range(0.65f, 0.85f);
+                    
                 foreach (Collider c in deco.GetComponentsInChildren<Collider>()) Destroy(c);
                 MakeDecoTransparent(deco, 0.52f);
                 foreach (Renderer rr in deco.GetComponentsInChildren<Renderer>())
