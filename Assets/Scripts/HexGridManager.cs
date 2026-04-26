@@ -99,8 +99,30 @@ public class HexGridManager : MonoBehaviour
     private void Start()
     {
         AutoPopulateAssets();
+        ResourcesLoadFallback();
         LogInspectorSetup();
         GenerateHexagonalMap();
+    }
+
+    // Runtime fallback that works in BUILDS (AutoPopulateAssets uses AssetDatabase
+    // which only exists in the editor). Loads tile prefabs from Assets/Resources/Prefabs/.
+    private void ResourcesLoadFallback()
+    {
+        if (!HasValidPrefab(plainPrefabs))
+        {
+            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Grass");
+            if (p != null) plainPrefabs = new[] { p };
+        }
+        if (!HasValidPrefab(mountainPrefabs))
+        {
+            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Mountain");
+            if (p != null) mountainPrefabs = new[] { p };
+        }
+        if (!HasValidPrefab(waterPrefabs))
+        {
+            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Water");
+            if (p != null) waterPrefabs = new[] { p };
+        }
     }
 
     // Guarantees an EventSystem exists regardless of scene setup.
@@ -748,6 +770,12 @@ public class HexGridManager : MonoBehaviour
 
         Renderer r = plane.GetComponent<Renderer>();
         Shader sh  = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Texture") ?? Shader.Find("Standard");
+        if (sh == null)
+        {
+            Debug.LogWarning("[HexGridManager] No shader found for background plane — skipping background.");
+            Destroy(plane);
+            return;
+        }
         Material mat = new Material(sh);
         mat.mainTexture = tex;
         if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
