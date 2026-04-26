@@ -42,9 +42,9 @@ public class Tile : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
 
-    // Continent/region colours — applied to the TILE surface (Risk board style).
+    // Continent/region colours — used by HexGridManager for border tinting.
     // Six regions matching GameManager.RegionNames order.
-    private static readonly Color[] RegionTints =
+    public static readonly Color[] RegionTints =
     {
         new Color(0.95f, 0.80f, 0.20f, 1f), // Uly Zhuz  — gold
         new Color(0.95f, 0.55f, 0.15f, 1f), // Zhetysu   — orange
@@ -149,11 +149,9 @@ public class Tile : MonoBehaviour
         if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
         meshRenderer.GetPropertyBlock(_propBlock);
 
-        // Base: tint the tile by its continent colour (Risk-style — the TILE shows the region,
-        // the PIECES and BORDERS show the owner).  65 % blend for clearly visible regions.
-        Color regionBase = ContinentId >= 0 && ContinentId < RegionTints.Length
-            ? Color.Lerp(_baseColor, RegionTints[ContinentId], 0.65f)
-            : _baseColor;
+        // Tile surfaces use their natural base colour — region identity is
+        // communicated exclusively through border highlight colours.
+        Color regionBase = _baseColor;
 
         Color tint;
         if (_isSelected)

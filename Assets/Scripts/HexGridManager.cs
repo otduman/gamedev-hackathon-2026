@@ -416,15 +416,18 @@ public class HexGridManager : MonoBehaviour
     {
         if (tile == null || !_borderSegments.TryGetValue(tile, out LineRenderer[] segs)) return;
 
-        // Water tiles have no borders — they shouldn't read as territory.
-        if (tile.Terrain == TerrainType.Water)
+        // Water and Mountain tiles have no borders — water isn't territory,
+        // mountains form natural boundaries and don't need outlines.
+        if (tile.Terrain == TerrainType.Water || tile.Terrain == TerrainType.Mountain)
         {
             foreach (LineRenderer lr in segs) if (lr != null) lr.enabled = false;
             return;
         }
 
-        bool  isOwned = tile.OwnerPlayerId >= 0 && tile.OwnerPlayerId < BorderClanColors.Length;
-        Color clanCol = isOwned ? BorderClanColors[tile.OwnerPlayerId] : BorderNeutral;
+        // Region colour for the border — based on ContinentId, not player.
+        Color regionCol = tile.ContinentId >= 0 && tile.ContinentId < Tile.RegionTints.Length
+            ? Tile.RegionTints[tile.ContinentId]
+            : BorderNeutral;
 
         for (int i = 0; i < 6; i++)
         {
@@ -435,18 +438,14 @@ public class HexGridManager : MonoBehaviour
 
             Vector2Int neighborCoord = tile.HexCoordinates + EdgeNeighborDirs[i];
             bool boundary = !Grid.TryGetValue(neighborCoord, out Tile neighbor)
-                         || neighbor.OwnerPlayerId != tile.OwnerPlayerId;
+                         || neighbor.ContinentId != tile.ContinentId
+                         || neighbor.Terrain == TerrainType.Water
+                         || neighbor.Terrain == TerrainType.Mountain;
 
-            if (isOwned)
-            {
-                lr.startColor = lr.endColor = boundary ? clanCol : new Color(clanCol.r, clanCol.g, clanCol.b, 0.35f);
-                lr.startWidth = lr.endWidth = boundary ? 0.045f : 0.012f;
-            }
-            else
-            {
-                lr.startColor = lr.endColor = BorderNeutral;
-                lr.startWidth = lr.endWidth = 0.010f;
-            }
+            lr.startColor = lr.endColor = boundary
+                ? regionCol
+                : new Color(regionCol.r, regionCol.g, regionCol.b, 0.25f);
+            lr.startWidth = lr.endWidth = boundary ? 0.055f : 0.010f;
 
             if (lr.material != null)
             {

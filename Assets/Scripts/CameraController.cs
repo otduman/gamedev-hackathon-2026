@@ -158,8 +158,8 @@ public class CameraController : MonoBehaviour
 
         // maxZoom is expanded to whatever the grid needs; minZoom stays as the closest scroll limit.
         float needed = Mathf.Max(zoomForH, zoomForW);
-        maxZoom      = needed * 1.05f;
-        _currentZoom = needed * 0.55f;           // start close — player can scroll out if needed
+        maxZoom      = needed * 1.00f;
+        _currentZoom = needed * 0.40f;           // start close — player can scroll out if needed
 
         _lastFitAspect = cam.aspect;
         UpdateCameraTransform();
