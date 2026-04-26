@@ -367,6 +367,7 @@ public class UIManager : MonoBehaviour
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(480f, 80f));
         _phaseBannerPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+        _phaseBannerPanel.GetComponent<Image>().raycastTarget = false; // purely visual — must not block modal clicks
 
         _phaseBannerText = CreateTMPLabel("BannerText", _phaseBannerPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -487,6 +488,12 @@ public class UIManager : MonoBehaviour
         if (_phaseBannerPanel == null) return;
         if (_phaseBannerCoroutine != null) StopCoroutine(_phaseBannerCoroutine);
         _phaseBannerCoroutine = StartCoroutine(PhaseBannerCoroutine(label, color));
+    }
+
+    private void DismissPhaseBanner()
+    {
+        if (_phaseBannerCoroutine != null) { StopCoroutine(_phaseBannerCoroutine); _phaseBannerCoroutine = null; }
+        if (_phaseBannerPanel != null) _phaseBannerPanel.SetActive(false);
     }
 
     private IEnumerator PhaseBannerCoroutine(string label, Color color)
@@ -760,6 +767,7 @@ public class UIManager : MonoBehaviour
     public void ShowCombatSetup(int atkPid, int defPid, int maxAtk, int maxDef, string atkClan, string defClan)
     {
         if (_combatSetupPanel == null) return;
+        DismissPhaseBanner();
         _atkDiceMax = maxAtk; _defDiceMax = maxDef;
         _selectedAtkDice = maxAtk; _selectedDefDice = maxDef;
         for (int i = 0; i < _atkDiceButtons.Length; i++) _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
@@ -837,6 +845,7 @@ public class UIManager : MonoBehaviour
         _migrationCount    = Mathf.Clamp(defaultCount, 1, _migrationCountMax);
         if (_migrationCountTitle != null) _migrationCountTitle.text = title;
         UpdateCountText();
+        DismissPhaseBanner();
         _migrationCountPanel.SetActive(true);
     }
 
@@ -902,6 +911,7 @@ public class UIManager : MonoBehaviour
         TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
         tmp.text = text; tmp.fontSize = fontSize; tmp.fontStyle = style;
         tmp.color = _white; tmp.alignment = TextAlignmentOptions.Center;
+        tmp.raycastTarget = false; // text never needs to capture clicks
         return tmp;
     }
 

@@ -44,11 +44,13 @@ public class GameManager : MonoBehaviour
     private int   _placementTurn   = 0;
 
     // Turn state
-    private Tile _selectedTile  = null;
-    private Tile _hoveredTile   = null;
-    private int  _reinforceLeft = 0;
-    private bool _fortifyUsed   = false;
-    private Tile _fortifySource = null;
+    private Tile _selectedTile    = null;
+    private Tile _hoveredTile     = null;
+    private int  _reinforceLeft   = 0;
+    private bool _fortifyUsed     = false;
+    private Tile _fortifySource   = null;
+    private Tile _fortifyDest     = null;
+    private bool _waitingForCount = false; // true while the troop-count panel is open
 
     // Combat pending
     private Tile _pendingAttacker    = null;
@@ -97,6 +99,7 @@ public class GameManager : MonoBehaviour
     private void HandleClick()
     {
         if (CurrentState == GameState.GameOver) return;
+        if (_waitingForCount) return; // count panel is open — ignore tile clicks
         Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
         if (!Physics.Raycast(ray, out RaycastHit hit)) return;
         Tile clicked = hit.collider.GetComponentInParent<Tile>();
@@ -517,16 +520,18 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (CurrentState == GameState.Fortify && _fortifySource != null && _selectedTile != null)
+        if (CurrentState == GameState.Fortify && _fortifySource != null && _fortifyDest != null)
         {
             int actual = Mathf.Clamp(count, 1, _fortifySource.CubeCount - 1);
             _fortifySource.PlayWalkAnimation();
             _fortifySource.RemoveCubes(actual);
-            _selectedTile.AddCubes(actual);
+            _fortifyDest.AddCubes(actual);
             _fortifySource.UpdateVisuals();
-            _selectedTile.UpdateVisuals();
-            _fortifyUsed   = true;
-            _fortifySource = null;
+            _fortifyDest.UpdateVisuals();
+            _fortifyUsed     = true;
+            _fortifySource   = null;
+            _fortifyDest     = null;
+            _waitingForCount = false;
             ClearSelection();
             UIManager.Instance?.HideMigrationCount();
             UIManager.Instance?.UpdateUI();
@@ -548,7 +553,9 @@ public class GameManager : MonoBehaviour
         }
         if (CurrentState == GameState.Fortify)
         {
-            _fortifySource = null;
+            _fortifySource   = null;
+            _fortifyDest     = null;
+            _waitingForCount = false;
             ClearSelection();
             UIManager.Instance?.HideMigrationCount();
             UIManager.Instance?.UpdateUI();
@@ -591,8 +598,8 @@ public class GameManager : MonoBehaviour
 
         if (!_highlightedTiles.Contains(clicked)) { _fortifySource = null; ClearSelection(); return; }
 
-        Tile dest = clicked;
-        _selectedTile  = dest;
+        _fortifyDest     = clicked;
+        _waitingForCount = true;
         int max = _fortifySource.CubeCount - 1;
         ClearHighlights();
         UIManager.Instance?.ShowMigrationCount(max, max, "Fortify");
@@ -722,7 +729,9 @@ public class GameManager : MonoBehaviour
     private void ClearSelection()
     {
         if (_selectedTile != null) { _selectedTile.SetSelected(false); _selectedTile.UpdateVisuals(); _selectedTile = null; }
-        _fortifySource = null;
+        _fortifySource   = null;
+        _fortifyDest     = null;
+        _waitingForCount = false;
         ClearHighlights();
     }
 
