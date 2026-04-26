@@ -105,24 +105,61 @@ public class HexGridManager : MonoBehaviour
     }
 
     // Runtime fallback that works in BUILDS (AutoPopulateAssets uses AssetDatabase
-    // which only exists in the editor). Loads tile prefabs from Assets/Resources/Prefabs/.
+    // which only exists in the editor). Loads tile prefabs and decorations from Resources/.
     private void ResourcesLoadFallback()
     {
-        if (!HasValidPrefab(plainPrefabs))
+        if (!HasValidPrefab(plainPrefabs))    plainPrefabs    = LoadResourcesArray("Prefabs/Tile_Grass");
+        if (!HasValidPrefab(mountainPrefabs)) mountainPrefabs = LoadResourcesArray("Prefabs/Tile_Mountain");
+        if (!HasValidPrefab(waterPrefabs))    waterPrefabs    = LoadResourcesArray("Prefabs/Tile_Water");
+
+        if (!HasValidPrefab(treePrefabs))     treePrefabs     = LoadResourcesArray(
+            "Decorations/nature/trees_A_medium",
+            "Decorations/nature/trees_A_small",
+            "Decorations/nature/tree_single_A");
+
+        if (!HasValidPrefab(rockPrefabs))     rockPrefabs     = LoadResourcesArray(
+            "Decorations/nature/rock_single_A",
+            "Decorations/nature/rock_single_B",
+            "Decorations/nature/rock_single_C",
+            "Decorations/nature/rock_single_D",
+            "Decorations/nature/rock_single_E");
+
+        if (!HasValidPrefab(hillPrefabs))     hillPrefabs     = LoadResourcesArray(
+            "Decorations/nature/hills_A",
+            "Decorations/nature/hills_A_trees",
+            "Decorations/nature/hills_B",
+            "Decorations/nature/hills_B_trees",
+            "Decorations/nature/hills_C",
+            "Decorations/nature/hills_C_trees");
+
+        if (!HasValidPrefab(mountainDecoPrefabs)) mountainDecoPrefabs = LoadResourcesArray(
+            "Decorations/nature/mountain_A",
+            "Decorations/nature/mountain_A_grass",
+            "Decorations/nature/mountain_A_grass_trees",
+            "Decorations/nature/mountain_B",
+            "Decorations/nature/mountain_B_grass",
+            "Decorations/nature/mountain_B_grass_trees",
+            "Decorations/nature/mountain_C",
+            "Decorations/nature/mountain_C_grass",
+            "Decorations/nature/mountain_C_grass_trees");
+
+        if (!HasValidPrefab(propPrefabs))     propPrefabs     = LoadResourcesArray(
+            "Decorations/props/bucket_arrows",
+            "Decorations/props/sack",
+            "Decorations/props/target",
+            "Decorations/props/tent",
+            "Decorations/props/weaponrack");
+    }
+
+    private static GameObject[] LoadResourcesArray(params string[] resourcePaths)
+    {
+        var list = new List<GameObject>();
+        foreach (string path in resourcePaths)
         {
-            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Grass");
-            if (p != null) plainPrefabs = new[] { p };
+            GameObject p = Resources.Load<GameObject>(path);
+            if (p != null) list.Add(p);
         }
-        if (!HasValidPrefab(mountainPrefabs))
-        {
-            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Mountain");
-            if (p != null) mountainPrefabs = new[] { p };
-        }
-        if (!HasValidPrefab(waterPrefabs))
-        {
-            GameObject p = Resources.Load<GameObject>("Prefabs/Tile_Water");
-            if (p != null) waterPrefabs = new[] { p };
-        }
+        return list.ToArray();
     }
 
     // Guarantees an EventSystem exists regardless of scene setup.
