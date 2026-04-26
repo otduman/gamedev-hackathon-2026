@@ -487,7 +487,7 @@ public class HexGridManager : MonoBehaviour
         
         if (tile.IsSelected)
         {
-            targetColor = Color.yellow;
+            targetColor = new Color(1f, 0.98f, 0.85f); // Neutral bright cream/white
             widthMult = 2.5f;
         }
         else if (tile.IsHighlighted)
