@@ -22,18 +22,13 @@ public class AudioManager : MonoBehaviour
         _source             = gameObject.AddComponent<AudioSource>();
         _source.playOnAwake = false;
 
-        // When added via AddComponent at runtime the SerializeField slots are empty.
-        // Load from the known project path so no manual Inspector wiring is needed.
-#if UNITY_EDITOR
-        if (_combatClip == null)
-            _combatClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/music/sfx_combat.mp3");
-        if (_conqueClip == null)
-            _conqueClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/music/sfx_conque.mp3");
-        if (_diceClip == null)
-            _diceClip   = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/music/sfx_dice.mp3");
-        if (_buttonClip == null)
-            _buttonClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/music/sfx_button.mp3");
-#endif
+        // SFX live in Assets/Resources/sfx/ so they're available in built players
+        // (AssetDatabase only works in the Editor). Inspector-assigned clips
+        // still take precedence.
+        if (_combatClip == null) _combatClip = Resources.Load<AudioClip>("sfx/sfx_combat");
+        if (_conqueClip == null) _conqueClip = Resources.Load<AudioClip>("sfx/sfx_conque");
+        if (_diceClip   == null) _diceClip   = Resources.Load<AudioClip>("sfx/sfx_dice");
+        if (_buttonClip == null) _buttonClip = Resources.Load<AudioClip>("sfx/sfx_button");
     }
 
     public void PlayCombatSound()  => Play(_combatClip);

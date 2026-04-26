@@ -223,12 +223,12 @@ public class UIManager : MonoBehaviour
 
     private void LoadFonts()
     {
-#if UNITY_EDITOR
-        _fontRegular = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Cinzel/Cinzel-Regular SDF.asset");
-        _fontBold    = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Cinzel/Cinzel-Bold SDF.asset");
-#endif
+        // Fonts live in Assets/Resources/fonts/ so they ship with built players.
+        // AssetDatabase is editor-only and would leave the build font-less.
+        _fontRegular = Resources.Load<TMP_FontAsset>("fonts/Cinzel-Regular SDF");
+        _fontBold    = Resources.Load<TMP_FontAsset>("fonts/Cinzel-Bold SDF");
         if (_fontRegular == null || _fontBold == null)
-            Debug.LogWarning("[UIManager] Cinzel SDF fonts not found — falling back to TMP default.");
+            Debug.LogWarning("[UIManager] Cinzel SDF fonts not found in Resources — falling back to TMP default.");
     }
 
     // -------------------------------------------------------------------------

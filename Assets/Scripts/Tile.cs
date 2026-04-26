@@ -417,31 +417,28 @@ public class Tile : MonoBehaviour
             if (w != null) PlayIdleAnimation(w);
     }
 
-    // Loads an AnimationClip from the project FBX files by keyword (Editor only).
+    // Loads an AnimationClip from FBX files in Assets/Resources/animation/ by keyword.
+    // Works in both Editor and built players (Resources.LoadAll bundles them at build).
     private static AnimationClip LoadLegacyClipByKeyword(string keyword)
     {
-#if UNITY_EDITOR
         string[] candidates = {
-            "Assets/animation/Animation_Walking_withSkin.fbx",
-            "Assets/animation/Animation_Attack_withSkin.fbx",
-            "Assets/animation/Animation_Alert_withSkin.fbx",
-            "Assets/KayKit/Meshy_AI_biped_Animation_Walking_withSkin.fbx",
+            "animation/Animation_Walking_withSkin",
+            "animation/Animation_Attack_withSkin",
+            "animation/Animation_Alert_withSkin",
         };
-        foreach (string path in candidates)
+        foreach (string resourcePath in candidates)
         {
-            if (path.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
-            foreach (var asset in UnityEditor.AssetDatabase.LoadAllAssetsAtPath(path))
+            if (resourcePath.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            foreach (var clip in Resources.LoadAll<AnimationClip>(resourcePath))
             {
-                if (asset is AnimationClip c && !c.name.StartsWith("__preview__"))
-                {
-                    // Legacy Animation requires the clip to have legacy=true.
-                    AnimationClip copy = UnityEngine.Object.Instantiate(c);
-                    copy.legacy = true;
-                    return copy;
-                }
+                if (clip == null) continue;
+                if (clip.name.StartsWith("__preview__")) continue;
+                // Legacy Animation requires the clip to have legacy=true.
+                AnimationClip copy = UnityEngine.Object.Instantiate(clip);
+                copy.legacy = true;
+                return copy;
             }
         }
-#endif
         return null;
     }
 

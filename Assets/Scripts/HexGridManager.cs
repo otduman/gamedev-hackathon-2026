@@ -732,6 +732,9 @@ public class HexGridManager : MonoBehaviour
 
     private void CreateBackgroundPlane()
     {
+        // Loaded from Assets/Resources/ so it ships with built players.
+        // System.IO.File access doesn't work in WebGL and breaks for non-editor
+        // platforms in general — Resources.Load is the portable path.
         Texture2D tex = Resources.Load<Texture2D>("background-image");
         if (tex == null) { Debug.LogWarning("[HexGridManager] background-image not found in Resources."); return; }
 
