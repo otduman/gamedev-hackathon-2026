@@ -39,8 +39,23 @@ public class UIManager : MonoBehaviour
     // UI element references (built in Awake)
     // -------------------------------------------------------------------------
 
+    // Screen-level panels (for show/hide)
+    private GameObject           _topBarGo;
+    private GameObject           _rightPanelGo;
+    private GameObject           _mainMenuPanel;
+    private GameObject           _leaderSelectionPanel;
+    private TextMeshProUGUI[]    _leaderMissionTexts;
+
+    // Sprite overrides — assign via the Inspector to plug in Hi-Fi art assets
+    [SerializeField] private Sprite   _menuBackground;
+    [SerializeField] private Sprite   _buttonSkin;
+    [SerializeField] private Sprite   _panelSkin;
+    [SerializeField] private Sprite[] _leaderPortraits; // order: Argyn, Naiman, Kerey, Kongrat
+    [SerializeField] private Sprite   _victoryBackground;
+
     // Top bar
     private Image            _leaderPanelBg;
+    private Image            _leaderDotImage;
     private TextMeshProUGUI  _leaderNameText;
     private TextMeshProUGUI  _leaderEmpireText;
     private TextMeshProUGUI  _phaseHintText;
@@ -109,6 +124,8 @@ public class UIManager : MonoBehaviour
     private int                 _defDiceMax;
     private TextMeshProUGUI     _atkHeader;
     private TextMeshProUGUI     _defHeader;
+    private Image               _atkZoneImage;
+    private Image               _defZoneImage;
     private string              _cachedAtkClan = "Attacker";
     private string              _cachedDefClan = "Defender";
 
@@ -223,6 +240,12 @@ public class UIManager : MonoBehaviour
         BuildCombatSetupPanel();
         BuildMigrationCountPanel();
         BuildPhaseBanner();
+        BuildMainMenu();
+        BuildLeaderSelection();
+
+        // Game starts at MainMenu — hide gameplay HUD until the player starts
+        if (_topBarGo != null)    _topBarGo.SetActive(false);
+        if (_rightPanelGo != null) _rightPanelGo.SetActive(false);
     }
 
     public static Color GetClanColor(int playerId) => playerId switch
@@ -243,6 +266,7 @@ public class UIManager : MonoBehaviour
         // Bar background
         GameObject bar = new GameObject("TopBar");
         bar.transform.SetParent(gameObject.transform, false);
+        _topBarGo = bar;
         RectTransform brt = bar.AddComponent<RectTransform>();
         brt.anchorMin = new Vector2(0f, 1f); brt.anchorMax = new Vector2(1f, 1f);
         brt.pivot = new Vector2(0f, 1f);
@@ -278,6 +302,7 @@ public class UIManager : MonoBehaviour
         Image dotImg = dot.AddComponent<Image>();
         dotImg.color = _clan0Color;
         dotImg.raycastTarget = false;
+        _leaderDotImage = dotImg;
 
         _leaderNameText = CreateTMPLabel("LeaderName", leaderPanel,
             new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f),
@@ -384,6 +409,7 @@ public class UIManager : MonoBehaviour
         // Sidebar background
         GameObject panel = new GameObject("RightPanel");
         panel.transform.SetParent(gameObject.transform, false);
+        _rightPanelGo = panel;
         RectTransform rt = panel.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(1f, 0f); rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(1f, 0.5f);
@@ -543,31 +569,71 @@ public class UIManager : MonoBehaviour
     {
         _diceCombatPanel = CreatePanel("DiceCombatPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(560f, 220f));
-        _diceCombatPanel.GetComponent<Image>().color = _panelColor;
+            Vector2.zero, new Vector2(600f, 260f));
+        _diceCombatPanel.GetComponent<Image>().color = new Color(0.055f, 0.039f, 0.027f, 0.97f);
         AddGoldBorder(_diceCombatPanel);
         _diceCombatPanel.SetActive(false);
     }
 
+    // ── Game Over panel fields (portrait swapped at runtime)
+    private Image _gameOverPortrait;
+
     private void BuildGameOverPanel()
     {
+        // Wider panel to accommodate portrait + text side by side
         _gameOverPanel = CreatePanel("GameOverPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(620f, 340f));
-        _gameOverPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.92f);
+            Vector2.zero, new Vector2(680f, 360f));
+        _gameOverPanel.GetComponent<Image>().color = new Color(0.025f, 0.016f, 0.010f, 0.96f);
         AddGoldBorder(_gameOverPanel);
+
+        // ── Portrait (left half, 200×200 square) ─────────────────────────
+        GameObject portraitGo = new GameObject("WinnerPortrait");
+        portraitGo.transform.SetParent(_gameOverPanel.transform, false);
+        RectTransform prt = portraitGo.AddComponent<RectTransform>();
+        prt.anchorMin = prt.anchorMax = prt.pivot = new Vector2(0.5f, 0.5f);
+        prt.anchoredPosition = new Vector2(-200f, 20f);
+        prt.sizeDelta = new Vector2(200f, 200f);
+        _gameOverPortrait = portraitGo.AddComponent<Image>();
+        _gameOverPortrait.color = new Color(0.18f, 0.14f, 0.09f, 1f);
+        _gameOverPortrait.preserveAspect = true;
+        _gameOverPortrait.raycastTarget = false;
+        AddGoldBorder(portraitGo);
+
+        // ── Right: title + result text ────────────────────────────────────
+        var victoryTitle = CreateTMPLabel("VictoryTitle", _gameOverPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(100f, 100f), new Vector2(320f, 40f), "VICTORY!", 28, FontStyles.Bold);
+        victoryTitle.color = _goldColor;
+        victoryTitle.alignment = TextAlignmentOptions.Center;
 
         _gameOverText = CreateTMPLabel("GameOverText", _gameOverPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 60f), new Vector2(580f, 140f), "Game Over", 30, FontStyles.Bold);
+            new Vector2(100f, 20f), new Vector2(320f, 130f), "", 15, FontStyles.Normal);
         _gameOverText.alignment = TextAlignmentOptions.Center;
-        _gameOverText.color = _goldColor;
+        _gameOverText.color = _cream;
 
-        CreateButton("RestartButton", _gameOverPanel,
+        // Gold divider
+        GameObject div = new GameObject("Divider");
+        div.transform.SetParent(_gameOverPanel.transform, false);
+        RectTransform divrt = div.AddComponent<RectTransform>();
+        divrt.anchorMin = divrt.anchorMax = divrt.pivot = new Vector2(0.5f, 0.5f);
+        divrt.anchoredPosition = new Vector2(100f, -65f);
+        divrt.sizeDelta = new Vector2(300f, 1f);
+        div.AddComponent<Image>().color = _brassAlpha;
+
+        var replayBtn = CreateButton("ReplayButton", _gameOverPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -90f), new Vector2(200f, 55f),
-            "Play Again", new Color(0.490f, 0.082f, 0.082f),
-            () => UnityEngine.SceneManagement.SceneManager.LoadScene(0));
+            new Vector2(-20f, -115f), new Vector2(170f, 50f),
+            "REPLAY", new Color(0.490f, 0.082f, 0.082f),
+            () => GameManager.Instance?.RestartGame());
+        AddGoldBorder(replayBtn.gameObject);
+
+        CreateButton("MainMenuButton", _gameOverPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(200f, -115f), new Vector2(170f, 50f),
+            "MAIN MENU", new Color(0.165f, 0.122f, 0.063f, 0.96f),
+            () => GameManager.Instance?.RestartGame());
 
         _gameOverPanel.SetActive(false);
     }
@@ -652,6 +718,8 @@ public class UIManager : MonoBehaviour
         // ── Leader panel ──────────────────────────────────────────────────
         // Background color is transparent so no need to update it here.
 
+        if (_leaderDotImage != null) _leaderDotImage.color = fc;
+
         if (_leaderNameText != null)
         {
             _leaderNameText.text  = $"{GameManager.Instance.GetClanName(pid)}'s Turn";
@@ -662,6 +730,7 @@ public class UIManager : MonoBehaviour
         {
             _leaderEmpireText.text = GameManager.Instance.CurrentState switch
             {
+                GameState.MainMenu         => "MENU",
                 GameState.InitialPlacement => "SETUP",
                 GameState.Reinforce        => "REINFORCE",
                 GameState.Attack           => "ATTACK",
@@ -682,6 +751,7 @@ public class UIManager : MonoBehaviour
         {
             _phaseHintText.text = GameManager.Instance.CurrentState switch
             {
+                GameState.MainMenu         => "",
                 GameState.InitialPlacement => $"Place {GameManager.Instance.GetExtraTroopsLeft(pid)} warriors on your territories",
                 GameState.Reinforce        => $"+{Mathf.Max(3, (CountTiles(pid) / 3))} warriors to place",
                 GameState.Attack           => "Click an enemy territory to attack",
@@ -697,14 +767,20 @@ public class UIManager : MonoBehaviour
         if (_endTurnButton != null)
         {
             GameState s = GameManager.Instance.CurrentState;
-            _endTurnButton.interactable = s == GameState.Attack || s == GameState.Fortify;
+            bool active = s == GameState.InitialPlacement || s == GameState.Attack || s == GameState.Fortify;
+            _endTurnButton.interactable = active;
             if (_endTurnBg != null)
-            {
-                bool active = s == GameState.Attack || s == GameState.Fortify;
                 _endTurnBg.color = active
-                    ? new Color(0.165f, 0.122f, 0.063f, 0.96f)  // warm gold tint
+                    ? new Color(0.165f, 0.122f, 0.063f, 0.96f)
                     : new Color(0.082f, 0.059f, 0.047f, 0.96f);
-            }
+            if (_endTurnLabel != null)
+                _endTurnLabel.text = s switch
+                {
+                    GameState.InitialPlacement => "SKIP\nTURN",
+                    GameState.Attack           => "END\nATTACK",
+                    GameState.Fortify          => "END\nTURN",
+                    _                          => "END\nPHASE",
+                };
         }
 
         // ── Mission panel ─────────────────────────────────────────────────
@@ -729,6 +805,7 @@ public class UIManager : MonoBehaviour
         if (_phasePillBg == null) return;
 
         GameState state = GameManager.Instance.CurrentState;
+        if (state == GameState.MainMenu) return;
         bool[] active = {
             state == GameState.InitialPlacement,
             state == GameState.Reinforce,
@@ -962,31 +1039,61 @@ public class UIManager : MonoBehaviour
         Color atkColor = GetClanColor(atkPid);
         Color defColor = GetClanColor(defPid);
 
-        CreateTMPLabel("Header", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 85f), new Vector2(540f, 30f),
-            $"{atkName} attacks {defName}!", 17, FontStyles.Bold);
+        // ── Coloured left/right zone strips ──────────────────────────────
+        {
+            GameObject az = new GameObject("AtkZone");
+            az.transform.SetParent(_diceCombatPanel.transform, false);
+            RectTransform azrt = az.AddComponent<RectTransform>();
+            azrt.anchorMin = Vector2.zero; azrt.anchorMax = new Vector2(0.5f, 1f);
+            azrt.offsetMin = azrt.offsetMax = Vector2.zero;
+            az.AddComponent<Image>().color = new Color(atkColor.r * 0.12f, atkColor.g * 0.12f, atkColor.b * 0.12f, 0.6f);
+
+            GameObject dz = new GameObject("DefZone");
+            dz.transform.SetParent(_diceCombatPanel.transform, false);
+            RectTransform dzrt = dz.AddComponent<RectTransform>();
+            dzrt.anchorMin = new Vector2(0.5f, 0f); dzrt.anchorMax = Vector2.one;
+            dzrt.offsetMin = dzrt.offsetMax = Vector2.zero;
+            dz.AddComponent<Image>().color = new Color(defColor.r * 0.12f, defColor.g * 0.12f, defColor.b * 0.12f, 0.6f);
+        }
+
+        // ── Header ─────────────────────────────────────────────────────
+        var header = CreateTMPLabel("Header", _diceCombatPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -14f), new Vector2(560f, 30f),
+            $"{atkName}  ⚔  {defName}", 17, FontStyles.Bold);
+        header.color = _goldColor;
 
         TextMeshProUGUI aLabel = CreateTMPLabel("AtkLabel", _diceCombatPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, 58f), new Vector2(200f, 24f), atkName, 13, FontStyles.Bold);
+            new Vector2(-145f, 72f), new Vector2(200f, 24f), atkName.ToUpper(), 12, FontStyles.Bold);
         aLabel.color = atkColor;
+        aLabel.alignment = TextAlignmentOptions.Center;
+
+        // VS label
+        var vsLbl = CreateTMPLabel("VS", _diceCombatPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 72f), new Vector2(40f, 24f), "VS", 13, FontStyles.Bold);
+        vsLbl.color = _goldDim;
 
         TextMeshProUGUI dLabel = CreateTMPLabel("DefLabel", _diceCombatPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, 58f), new Vector2(200f, 24f), defName, 13, FontStyles.Bold);
+            new Vector2(145f, 72f), new Vector2(200f, 24f), defName.ToUpper(), 12, FontStyles.Bold);
         dLabel.color = defColor;
+        dLabel.alignment = TextAlignmentOptions.Center;
 
-        const float dieSize = 52f, dieStep = 60f, diceRowY = 5f;
+        const float dieSize = 58f, dieStep = 66f, diceRowY = 10f;
         int atkCount = result.AttackerRolls.Length, defCount = result.DefenderRolls.Length;
 
         TextMeshProUGUI[] atkLabels = new TextMeshProUGUI[atkCount];
         TextMeshProUGUI[] defLabels = new TextMeshProUGUI[defCount];
 
+        // Attacker dice fan from center-left, defender dice fan from center-right
+        float atkStart = -(dieStep * (atkCount - 1) * 0.5f) - dieStep * 0.5f - 20f;
+        float defStart =  (dieStep * (defCount - 1) * 0.5f) + dieStep * 0.5f + 20f;
         for (int i = 0; i < atkCount; i++)
-            atkLabels[i] = SpawnDie($"AtkDie{i}", _diceCombatPanel, -1, new Vector2(-(dieStep * 0.5f) - dieStep * i, diceRowY), atkColor);
+            atkLabels[i] = SpawnDie($"AtkDie{i}", _diceCombatPanel, -1, new Vector2(atkStart + i * dieStep, diceRowY), atkColor);
         for (int i = 0; i < defCount; i++)
-            defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2((dieStep * 0.5f) + dieStep * (defCount - 1 - i), diceRowY), defColor);
+            defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2(defStart - i * dieStep, diceRowY), defColor);
 
         AudioManager.Instance?.PlayDiceSound();
 
@@ -1038,32 +1145,40 @@ public class UIManager : MonoBehaviour
 
         int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : atkCount;
         int pairs   = Mathf.Min(atkUsed, defCount);
+
+        // Attacker die starts, mirrored from the center-left position used above
+        float atkS = -(dieStep * (atkCount - 1) * 0.5f) - dieStep * 0.5f - 20f;
+        float defS =  (dieStep * (defCount - 1)  * 0.5f) + dieStep * 0.5f + 20f;
+
         for (int i = 0; i < pairs; i++)
         {
             int di = pairs - 1 - i;
             int av = result.AttackerRolls[i], dv = result.DefenderRolls[di];
             bool win = av > dv;
-            string sym = av == dv ? "=" : win ? ">" : "<";
+            string sym = av == dv ? "=" : win ? "▲" : "▼";
             Color  sc  = win ? new Color(0.2f, 0.85f, 0.2f) : new Color(0.9f, 0.2f, 0.2f);
+            float indX = (atkS + i * dieStep + defS - di * dieStep) * 0.5f;
             TextMeshProUGUI ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-(dieStep * 0.5f) - dieStep * i, diceRowY + dieSize * 0.5f + 14f), new Vector2(46f, 22f),
-                $"{sym} {dv}", 14, FontStyles.Bold);
+                new Vector2(indX, diceRowY + dieSize * 0.5f + 16f), new Vector2(46f, 22f),
+                sym, 16, FontStyles.Bold);
             ind.color = sc;
         }
 
         TextMeshProUGUI summary = CreateTMPLabel("Summary", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -50f), new Vector2(520f, 28f),
-            $"Attacker lost {result.AttackerLosses}  |  Defender lost {result.DefenderLosses}", 15, FontStyles.Normal);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 42f), new Vector2(560f, 28f),
+            $"Attacker lost {result.AttackerLosses}  •  Defender lost {result.DefenderLosses}", 14, FontStyles.Normal);
         summary.color = _cream;
+        summary.alignment = TextAlignmentOptions.Center;
 
         if (result.Conquered)
         {
             TextMeshProUGUI conq = CreateTMPLabel("Conquered", _diceCombatPanel,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -83f), new Vector2(520f, 28f), "CONQUERED!", 18, FontStyles.Bold);
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 15f), new Vector2(560f, 28f), "TERRITORY CONQUERED!", 18, FontStyles.Bold);
             conq.color = _goldColor;
+            conq.alignment = TextAlignmentOptions.Center;
         }
 
         yield return new WaitForSeconds(3f);
@@ -1072,7 +1187,7 @@ public class UIManager : MonoBehaviour
 
     private TextMeshProUGUI SpawnDie(string name, GameObject parent, int value, Vector2 position, Color clanColor)
     {
-        const float dieSize = 52f;
+        const float dieSize = 58f;
         GameObject dieGo = new GameObject(name);
         dieGo.transform.SetParent(parent.transform, false);
         RectTransform rt = dieGo.AddComponent<RectTransform>();
@@ -1103,14 +1218,43 @@ public class UIManager : MonoBehaviour
         if (panel != null) panel.SetActive(false);
     }
 
-    // Game over
+    // Leader names mirroring the portrait asset order (must match _leaderPortraits index)
+    private static readonly string[] LeaderTitles =
+        { "Zhanibek Khan", "Tamerlane", "Slavic Knight", "Yongle" };
+
     public void ShowGameOver(int winningPlayerId, Mission mission)
     {
         if (_gameOverPanel == null) return;
-        string name = GameManager.Instance?.GetClanName(winningPlayerId) ?? $"Player {winningPlayerId}";
-        string missionDesc = mission != null ? $"\nMission: {mission.Description}" : "";
-        _gameOverText.text  = $"{name} is victorious!{missionDesc}\nThe steppes bow to your Batyr.";
-        _gameOverText.color = GetClanColor(winningPlayerId);
+        Color fc   = GetClanColor(winningPlayerId);
+        string clan = GameManager.Instance?.GetClanName(winningPlayerId) ?? $"Player {winningPlayerId}";
+        string leader = winningPlayerId >= 0 && winningPlayerId < LeaderTitles.Length
+            ? LeaderTitles[winningPlayerId] : clan;
+        string missionLine = mission != null ? $"Mission complete:\n{mission.Description}" : "";
+
+        if (_gameOverText != null)
+        {
+            _gameOverText.text  = $"{clan}\n{leader}\n\n{missionLine}";
+            _gameOverText.color = fc;
+        }
+
+        // Swap portrait to the winner's image
+        if (_gameOverPortrait != null)
+        {
+            bool hasPortrait = _leaderPortraits != null
+                && winningPlayerId < _leaderPortraits.Length
+                && _leaderPortraits[winningPlayerId] != null;
+            if (hasPortrait)
+            {
+                _gameOverPortrait.sprite = _leaderPortraits[winningPlayerId];
+                _gameOverPortrait.color  = Color.white;
+            }
+            else
+            {
+                _gameOverPortrait.sprite = null;
+                _gameOverPortrait.color  = new Color(fc.r * 0.35f, fc.g * 0.35f, fc.b * 0.35f, 1f);
+            }
+        }
+
         _gameOverPanel.SetActive(true);
     }
 
@@ -1120,67 +1264,132 @@ public class UIManager : MonoBehaviour
 
     private void BuildCombatSetupPanel()
     {
+        // Panel: 600 × 300, dark wood background
         _combatSetupPanel = CreatePanel("CombatSetupPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(560f, 280f));
-        _combatSetupPanel.GetComponent<Image>().color = _panelColor;
+            Vector2.zero, new Vector2(600f, 300f));
+        _combatSetupPanel.GetComponent<Image>().color = new Color(0.055f, 0.039f, 0.027f, 0.97f);
         AddGoldBorder(_combatSetupPanel);
 
-        var title = CreateTMPLabel("Title", _combatSetupPanel,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -22f), new Vector2(540f, 32f), "COMBAT SETUP", 22, FontStyles.Bold);
+        // ── Title bar ────────────────────────────────────────────────────
+        GameObject titleBar = new GameObject("TitleBar");
+        titleBar.transform.SetParent(_combatSetupPanel.transform, false);
+        RectTransform trt = titleBar.AddComponent<RectTransform>();
+        trt.anchorMin = new Vector2(0f, 1f); trt.anchorMax = new Vector2(1f, 1f);
+        trt.pivot = new Vector2(0.5f, 1f);
+        trt.anchoredPosition = Vector2.zero; trt.sizeDelta = new Vector2(0f, 46f);
+        titleBar.AddComponent<Image>().color = new Color(0.082f, 0.059f, 0.039f, 1f);
+        AddGoldBorder(titleBar, bottom: true);
+
+        var title = CreateTMPLabel("Title", titleBar,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(560f, 38f), "COMBAT SETUP", 22, FontStyles.Bold);
         title.color = _goldColor;
 
-        _atkHeader = CreateTMPLabel("AtkHeader", _combatSetupPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, 75f), new Vector2(220f, 24f), "Attacker dice", 14, FontStyles.Bold);
+        // ── Left (attacker) zone ─────────────────────────────────────────
+        GameObject atkZone = new GameObject("AtkZone");
+        atkZone.transform.SetParent(_combatSetupPanel.transform, false);
+        RectTransform artz = atkZone.AddComponent<RectTransform>();
+        artz.anchorMin = new Vector2(0f, 0.18f); artz.anchorMax = new Vector2(0.5f, 1f);
+        artz.offsetMin = new Vector2(0f, 0f); artz.offsetMax = new Vector2(-1f, -46f);
+        Image atkZoneImg = atkZone.AddComponent<Image>();
+        atkZoneImg.color = new Color(0.18f, 0.05f, 0.04f, 0.35f);
+        atkZoneImg.raycastTarget = false;
+        _atkZoneImage = atkZoneImg;
+
+        _atkHeader = CreateTMPLabel("AtkHeader", atkZone,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -14f), new Vector2(240f, 24f), "ATTACKER DICE", 13, FontStyles.Bold);
         _atkHeader.color = _clan1Color;
+        _atkHeader.alignment = TextAlignmentOptions.Center;
 
         _atkDiceButtons = new Button[3];
         for (int i = 0; i < 3; i++)
         {
             int n = i + 1;
-            _atkDiceButtons[i] = CreateButton($"AtkDice{n}", _combatSetupPanel,
+            var btn = CreateButton($"AtkDice{n}", atkZone,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-180f + i * 50f, 30f), new Vector2(46f, 46f),
-                n.ToString(), new Color(0.25f, 0.09f, 0.07f), () => SetAtkDice(n));
+                new Vector2(-74f + i * 62f, 10f), new Vector2(54f, 54f),
+                n.ToString(), new Color(0.30f, 0.08f, 0.06f), () => SetAtkDice(n));
+            AddGoldBorder(btn.gameObject);
+            _atkDiceButtons[i] = btn;
         }
 
-        _atkDiceLabel = CreateTMPLabel("AtkLabel", _combatSetupPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, -10f), new Vector2(220f, 22f), "Selected: 0", 13, FontStyles.Normal);
+        _atkDiceLabel = CreateTMPLabel("AtkLabel", atkZone,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 20f), new Vector2(240f, 20f), "", 11, FontStyles.Normal);
         _atkDiceLabel.color = _creamDim;
+        _atkDiceLabel.alignment = TextAlignmentOptions.Center;
 
-        _defHeader = CreateTMPLabel("DefHeader", _combatSetupPanel,
+        // ── Center VS divider ─────────────────────────────────────────────
+        GameObject vsDivider = new GameObject("VsDivider");
+        vsDivider.transform.SetParent(_combatSetupPanel.transform, false);
+        RectTransform vrt = vsDivider.AddComponent<RectTransform>();
+        vrt.anchorMin = new Vector2(0.5f, 0.18f); vrt.anchorMax = new Vector2(0.5f, 1f);
+        vrt.pivot = new Vector2(0.5f, 0.5f);
+        vrt.anchoredPosition = new Vector2(0f, -23f); vrt.sizeDelta = new Vector2(1.5f, -46f);
+        vsDivider.AddComponent<Image>().color = _brassAlpha;
+
+        var vsLabel = CreateTMPLabel("VS", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, 75f), new Vector2(220f, 24f), "Defender dice", 14, FontStyles.Bold);
+            new Vector2(0f, 8f), new Vector2(42f, 28f), "VS", 15, FontStyles.Bold);
+        vsLabel.color = _goldDim;
+
+        // ── Right (defender) zone ─────────────────────────────────────────
+        GameObject defZone = new GameObject("DefZone");
+        defZone.transform.SetParent(_combatSetupPanel.transform, false);
+        RectTransform defzt = defZone.AddComponent<RectTransform>();
+        defzt.anchorMin = new Vector2(0.5f, 0.18f); defzt.anchorMax = new Vector2(1f, 1f);
+        defzt.offsetMin = new Vector2(1f, 0f); defzt.offsetMax = new Vector2(0f, -46f);
+        Image defZoneImg = defZone.AddComponent<Image>();
+        defZoneImg.color = new Color(0.04f, 0.08f, 0.18f, 0.35f);
+        defZoneImg.raycastTarget = false;
+        _defZoneImage = defZoneImg;
+
+        _defHeader = CreateTMPLabel("DefHeader", defZone,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -14f), new Vector2(240f, 24f), "DEFENDER DICE", 13, FontStyles.Bold);
         _defHeader.color = _clan2Color;
+        _defHeader.alignment = TextAlignmentOptions.Center;
 
         _defDiceButtons = new Button[2];
         for (int i = 0; i < 2; i++)
         {
             int n = i + 1;
-            _defDiceButtons[i] = CreateButton($"DefDice{n}", _combatSetupPanel,
+            var btn = CreateButton($"DefDice{n}", defZone,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(80f + i * 50f, 30f), new Vector2(46f, 46f),
-                n.ToString(), new Color(0.07f, 0.14f, 0.24f), () => SetDefDice(n));
+                new Vector2(-31f + i * 62f, 10f), new Vector2(54f, 54f),
+                n.ToString(), new Color(0.06f, 0.12f, 0.28f), () => SetDefDice(n));
+            AddGoldBorder(btn.gameObject);
+            _defDiceButtons[i] = btn;
         }
 
-        _defDiceLabel = CreateTMPLabel("DefLabel", _combatSetupPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, -10f), new Vector2(220f, 22f), "Selected: 0", 13, FontStyles.Normal);
+        _defDiceLabel = CreateTMPLabel("DefLabel", defZone,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 20f), new Vector2(240f, 20f), "", 11, FontStyles.Normal);
         _defDiceLabel.color = _creamDim;
+        _defDiceLabel.alignment = TextAlignmentOptions.Center;
 
-        CreateButton("ResolveBtn", _combatSetupPanel,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(-80f, 30f), new Vector2(140f, 44f),
-            "Resolve", new Color(0.490f, 0.082f, 0.082f),
+        // ── Bottom action bar ─────────────────────────────────────────────
+        GameObject actionBar = new GameObject("ActionBar");
+        actionBar.transform.SetParent(_combatSetupPanel.transform, false);
+        RectTransform abart = actionBar.AddComponent<RectTransform>();
+        abart.anchorMin = new Vector2(0f, 0f); abart.anchorMax = new Vector2(1f, 0.18f);
+        abart.offsetMin = abart.offsetMax = Vector2.zero;
+        actionBar.AddComponent<Image>().color = new Color(0.06f, 0.044f, 0.030f, 1f);
+        AddGoldBorder(actionBar, top: true);
+
+        var resolveBtn = CreateButton("ResolveBtn", actionBar,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-90f, 0f), new Vector2(160f, 38f),
+            "RESOLVE", new Color(0.490f, 0.082f, 0.082f),
             () => GameManager.Instance?.OnCombatSetupConfirm(_selectedAtkDice, _selectedDefDice));
+        AddGoldBorder(resolveBtn.gameObject);
 
-        CreateButton("CancelBtn", _combatSetupPanel,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(80f, 30f), new Vector2(140f, 44f),
-            "Cancel", new Color(0.20f, 0.16f, 0.11f),
+        CreateButton("CancelBtn", actionBar,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(90f, 0f), new Vector2(160f, 38f),
+            "CANCEL", new Color(0.20f, 0.16f, 0.11f),
             () => GameManager.Instance?.OnCombatSetupCancel());
 
         _combatSetupPanel.SetActive(false);
@@ -1194,8 +1403,12 @@ public class UIManager : MonoBehaviour
         _selectedAtkDice = maxAtk; _selectedDefDice = maxDef;
         for (int i = 0; i < _atkDiceButtons.Length; i++) _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
         for (int i = 0; i < _defDiceButtons.Length; i++) _defDiceButtons[i].interactable = (i + 1) <= maxDef;
-        if (_atkHeader) _atkHeader.color = GetClanColor(atkPid);
-        if (_defHeader) _defHeader.color = GetClanColor(defPid);
+        Color ac = GetClanColor(atkPid);
+        Color dc = GetClanColor(defPid);
+        if (_atkHeader)    _atkHeader.color = ac;
+        if (_defHeader)    _defHeader.color = dc;
+        if (_atkZoneImage) _atkZoneImage.color = new Color(ac.r * 0.22f, ac.g * 0.22f, ac.b * 0.22f, 0.45f);
+        if (_defZoneImage) _defZoneImage.color = new Color(dc.r * 0.22f, dc.g * 0.22f, dc.b * 0.22f, 0.45f);
         _cachedAtkClan = atkClan; _cachedDefClan = defClan;
         RefreshCombatLabels();
         _combatSetupPanel.SetActive(true);
@@ -1288,6 +1501,275 @@ public class UIManager : MonoBehaviour
     {
         if (_migrationCountText != null)
             _migrationCountText.text = $"{_migrationCount} / {_migrationCountMax}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Main Menu screen
+    // -------------------------------------------------------------------------
+
+    private void BuildMainMenu()
+    {
+        _mainMenuPanel = CreatePanel("MainMenuPanel", gameObject,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero);
+        Image bg = _mainMenuPanel.GetComponent<Image>();
+        bg.color = _menuBackground != null ? Color.white : new Color(0.025f, 0.016f, 0.010f, 0.97f);
+        if (_menuBackground != null) { bg.sprite = _menuBackground; bg.type = Image.Type.Sliced; }
+        bg.raycastTarget = true;
+
+        // Title
+        var title = CreateTMPLabel("Title", _mainMenuPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 110f), new Vector2(720f, 90f),
+            "RISE OF NOMADS", 54, FontStyles.Bold);
+        title.color = _goldColor;
+        title.alignment = TextAlignmentOptions.Center;
+
+        var sub = CreateTMPLabel("Subtitle", _mainMenuPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 56f), new Vector2(520f, 30f),
+            "Lords of the Kazakh Steppe", 18, FontStyles.Italic);
+        sub.color = _creamDim;
+        sub.alignment = TextAlignmentOptions.Center;
+
+        // Decorative gold separator
+        GameObject line = new GameObject("GoldLine");
+        line.transform.SetParent(_mainMenuPanel.transform, false);
+        RectTransform lrt = line.AddComponent<RectTransform>();
+        lrt.anchorMin = lrt.anchorMax = lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.anchoredPosition = new Vector2(0f, 26f);
+        lrt.sizeDelta = new Vector2(400f, 1.5f);
+        line.AddComponent<Image>().color = _brassAlpha;
+
+        // Clan colour dots
+        float[] dotX = { -90f, -30f, 30f, 90f };
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject dot = new GameObject($"ClanDot_{i}");
+            dot.transform.SetParent(_mainMenuPanel.transform, false);
+            RectTransform drt = dot.AddComponent<RectTransform>();
+            drt.anchorMin = drt.anchorMax = drt.pivot = new Vector2(0.5f, 0.5f);
+            drt.anchoredPosition = new Vector2(dotX[i], 10f);
+            drt.sizeDelta = new Vector2(8f, 8f);
+            dot.AddComponent<Image>().color = GetClanColor(i);
+        }
+
+        var startBtn = CreateButton("StartBtn", _mainMenuPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -30f), new Vector2(250f, 58f),
+            "START GAME", new Color(0.165f, 0.122f, 0.063f, 0.96f),
+            () => GameManager.Instance?.StartGame());
+        AddGoldBorder(startBtn.gameObject);
+
+        var quitBtn = CreateButton("QuitBtn", _mainMenuPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -102f), new Vector2(250f, 50f),
+            "QUIT", new Color(0.20f, 0.16f, 0.11f, 0.96f),
+            () => Application.Quit());
+
+        var ver = CreateTMPLabel("Version", _mainMenuPanel,
+            new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
+            new Vector2(-14f, 12f), new Vector2(220f, 18f),
+            "Rise of Nomads  v1.0", 9, FontStyles.Normal);
+        ver.color = new Color(_goldDim.r, _goldDim.g, _goldDim.b, 0.45f);
+        ver.alignment = TextAlignmentOptions.Right;
+
+        _mainMenuPanel.SetActive(true);
+    }
+
+    // -------------------------------------------------------------------------
+    // Leader Selection screen
+    // -------------------------------------------------------------------------
+
+    private void BuildLeaderSelection()
+    {
+        _leaderSelectionPanel = CreatePanel("LeaderSelectionPanel", gameObject,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero);
+        _leaderSelectionPanel.GetComponent<Image>().color = new Color(0.025f, 0.016f, 0.010f, 0.97f);
+        _leaderSelectionPanel.GetComponent<Image>().raycastTarget = true;
+
+        var title = CreateTMPLabel("Title", _leaderSelectionPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -38f), new Vector2(600f, 52f),
+            "CLAN LEADERS", 38, FontStyles.Bold);
+        title.color = _goldColor;
+        title.alignment = TextAlignmentOptions.Center;
+
+        var sub = CreateTMPLabel("Subtitle", _leaderSelectionPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -76f), new Vector2(520f, 24f),
+            "Your secret mission has been assigned — keep it hidden!", 13, FontStyles.Italic);
+        sub.color = _creamDim;
+        sub.alignment = TextAlignmentOptions.Center;
+
+        // Leader names matching the provided portrait assets (in clan-color order)
+        // 0=Argyn(green)→Zhanibek Khan  1=Naiman(red)→Tamerlane
+        // 2=Kerey(blue)→Slavic Knight   3=Kongrat(gold)→Yongle
+        string[] clanNames   = { "Argyn",         "Naiman",    "Kerey",         "Kongrat" };
+        string[] leaderNames = { "Zhanibek Khan", "Tamerlane", "Slavic Knight", "Yongle" };
+
+        // Card centres: 168px wide, 10px gap → total span 702px at 1280 ref
+        float[] xPos = { -285f, -95f, 95f, 285f };
+        _leaderMissionTexts = new TextMeshProUGUI[4];
+
+        for (int i = 0; i < 4; i++)
+        {
+            Color fc = GetClanColor(i);
+
+            // ── Card frame: 168 × 290 ────────────────────────────────────────
+            // Layout (y from frame centre, frame half-height = 145):
+            //   +145  top edge
+            //   +143  clan colour swatch (4px)
+            //   +139  portrait top
+            //    +65  portrait centre  (158×158 square)
+            //     -9  portrait bottom
+            //    -20  name strip centre (22px)
+            //    -32  name bottom
+            //    -88  mission block centre (height 88)
+            //   -132  mission bottom
+            //   -145  bottom edge  (13px margin)
+            GameObject frame = new GameObject($"LeaderFrame_{i}");
+            frame.transform.SetParent(_leaderSelectionPanel.transform, false);
+            RectTransform frt = frame.AddComponent<RectTransform>();
+            frt.anchorMin = frt.anchorMax = frt.pivot = new Vector2(0.5f, 0.5f);
+            frt.anchoredPosition = new Vector2(xPos[i], 15f);
+            frt.sizeDelta = new Vector2(168f, 290f);
+            Image fImg = frame.AddComponent<Image>();
+            fImg.color = new Color(fc.r * 0.10f, fc.g * 0.10f, fc.b * 0.10f, 0.97f);
+            if (_panelSkin != null) { fImg.sprite = _panelSkin; fImg.type = Image.Type.Sliced; }
+            fImg.raycastTarget = false;
+            AddGoldBorder(frame);
+
+            // Top clan colour swatch (full width stripe)
+            GameObject swatch = new GameObject("Swatch");
+            swatch.transform.SetParent(frame.transform, false);
+            RectTransform swrt = swatch.AddComponent<RectTransform>();
+            swrt.anchorMin = swrt.anchorMax = swrt.pivot = new Vector2(0.5f, 0.5f);
+            swrt.anchoredPosition = new Vector2(0f, 143f);
+            swrt.sizeDelta = new Vector2(168f, 4f);
+            swatch.AddComponent<Image>().color = fc;
+
+            // ── Portrait (158×158 square — matches 1:1 source images) ───────
+            GameObject portrait = new GameObject("Portrait");
+            portrait.transform.SetParent(frame.transform, false);
+            RectTransform prt = portrait.AddComponent<RectTransform>();
+            prt.anchorMin = prt.anchorMax = prt.pivot = new Vector2(0.5f, 0.5f);
+            prt.anchoredPosition = new Vector2(0f, 65f);
+            prt.sizeDelta = new Vector2(158f, 158f);
+            Image pImg = portrait.AddComponent<Image>();
+            pImg.raycastTarget = false;
+            pImg.preserveAspect = true;  // never squish the 1:1 portraits
+
+            if (_leaderPortraits != null && i < _leaderPortraits.Length && _leaderPortraits[i] != null)
+            {
+                pImg.sprite = _leaderPortraits[i];
+                pImg.color  = Color.white;
+            }
+            else
+            {
+                // Placeholder: clan-tinted box with first letter
+                pImg.color = new Color(fc.r * 0.35f, fc.g * 0.35f, fc.b * 0.35f, 1f);
+                var initLabel = CreateTMPLabel("Initial", portrait,
+                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    Vector2.zero, new Vector2(158f, 158f),
+                    clanNames[i][0].ToString(), 60, FontStyles.Bold);
+                initLabel.color = new Color(fc.r, fc.g, fc.b, 0.30f);
+            }
+
+            // Thin clan-colour border around portrait
+            AddGoldBorder(portrait);
+
+            // ── Clan + leader name strip ─────────────────────────────────────
+            var clanLabel = CreateTMPLabel($"Clan_{i}", frame,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -20f), new Vector2(156f, 20f),
+                clanNames[i].ToUpper(), 13, FontStyles.Bold);
+            clanLabel.color = fc;
+            clanLabel.alignment = TextAlignmentOptions.Center;
+
+            var leaderLabel = CreateTMPLabel($"Leader_{i}", frame,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -36f), new Vector2(156f, 16f),
+                leaderNames[i], 9, FontStyles.Italic);
+            leaderLabel.color = _creamDim;
+            leaderLabel.alignment = TextAlignmentOptions.Center;
+
+            // Ornament divider
+            GameObject div = new GameObject("Div");
+            div.transform.SetParent(frame.transform, false);
+            RectTransform divrt = div.AddComponent<RectTransform>();
+            divrt.anchorMin = divrt.anchorMax = divrt.pivot = new Vector2(0.5f, 0.5f);
+            divrt.anchoredPosition = new Vector2(0f, -47f);
+            divrt.sizeDelta = new Vector2(140f, 1f);
+            div.AddComponent<Image>().color = _brassAlpha;
+
+            // ── Secret mission block ─────────────────────────────────────────
+            _leaderMissionTexts[i] = CreateTMPLabel($"Mission_{i}", frame,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -90f), new Vector2(152f, 82f),
+                "SECRET MISSION:\n???", 8, FontStyles.Italic);
+            _leaderMissionTexts[i].color = _creamDim;
+            _leaderMissionTexts[i].alignment = TextAlignmentOptions.Center;
+        }
+
+        var beginBtn = CreateButton("BeginSetupBtn", _leaderSelectionPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 36f), new Vector2(260f, 58f),
+            "BEGIN SETUP", new Color(0.165f, 0.122f, 0.063f, 0.96f),
+            () => GameManager.Instance?.BeginActualGame());
+        AddGoldBorder(beginBtn.gameObject);
+
+        _leaderSelectionPanel.SetActive(false);
+    }
+
+    // -------------------------------------------------------------------------
+    // Screen navigation
+    // -------------------------------------------------------------------------
+
+    public void ShowMainMenu()
+    {
+        if (_mainMenuPanel != null)       _mainMenuPanel.SetActive(true);
+        if (_leaderSelectionPanel != null) _leaderSelectionPanel.SetActive(false);
+        if (_topBarGo != null)            _topBarGo.SetActive(false);
+        if (_rightPanelGo != null)        _rightPanelGo.SetActive(false);
+        if (_gameOverPanel != null)       _gameOverPanel.SetActive(false);
+        HideTooltip();
+        DismissPhaseBanner();
+    }
+
+    public void ShowLeaderSelection()
+    {
+        if (_mainMenuPanel != null)       _mainMenuPanel.SetActive(false);
+        if (_leaderSelectionPanel != null)
+        {
+            RefreshLeaderSelection();
+            _leaderSelectionPanel.SetActive(true);
+        }
+        if (_topBarGo != null)   _topBarGo.SetActive(false);
+        if (_rightPanelGo != null) _rightPanelGo.SetActive(false);
+        HideTooltip();
+    }
+
+    public void HideMenuScreens()
+    {
+        if (_mainMenuPanel != null)       _mainMenuPanel.SetActive(false);
+        if (_leaderSelectionPanel != null) _leaderSelectionPanel.SetActive(false);
+        if (_topBarGo != null)            _topBarGo.SetActive(true);
+        if (_rightPanelGo != null)        _rightPanelGo.SetActive(true);
+    }
+
+    private void RefreshLeaderSelection()
+    {
+        if (_leaderMissionTexts == null || GameManager.Instance == null) return;
+        for (int i = 0; i < _leaderMissionTexts.Length; i++)
+        {
+            if (_leaderMissionTexts[i] == null) continue;
+            Mission m = GameManager.Instance.GetPlayerMission(i);
+            _leaderMissionTexts[i].text = m != null
+                ? $"SECRET MISSION:\n{m.Description}"
+                : "SECRET MISSION:\n???";
+        }
     }
 
     // -------------------------------------------------------------------------

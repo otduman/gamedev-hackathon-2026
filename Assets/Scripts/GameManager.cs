@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public enum GameState { InitialPlacement, Reinforce, Attack, CombatSetup, PostConquest, Fortify, GameOver }
+public enum GameState { MainMenu, InitialPlacement, Reinforce, Attack, CombatSetup, PostConquest, Fortify, GameOver }
 
 public enum MissionType { ControlTerritories, DestroyPlayer, ControlTwoRegions }
 
@@ -22,7 +22,7 @@ public class GameManager : MonoBehaviour
 
     public const int PlayerCount = 4;
 
-    public GameState CurrentState    { get; private set; } = GameState.InitialPlacement;
+    public GameState CurrentState    { get; private set; } = GameState.MainMenu;
     public int       CurrentPlayerId { get; private set; } = 0;
 
     private static readonly string[] ClanNames = { "Argyn", "Naiman", "Kerey", "Kongrat" };
@@ -60,6 +60,7 @@ public class GameManager : MonoBehaviour
     private Tile _postConquestDest   = null;
 
     private List<Tile> _highlightedTiles = new List<Tile>();
+    private bool _gridReady = false;
 
     // -------------------------------------------------------------------------
 
@@ -73,7 +74,7 @@ public class GameManager : MonoBehaviour
         QualitySettings.globalTextureMipmapLimit = 0;
 
         HexGridManager hexGrid = GetComponent<HexGridManager>() ?? FindAnyObjectByType<HexGridManager>();
-        if (hexGrid != null) hexGrid.OnGridReady += InitializeGame;
+        if (hexGrid != null) hexGrid.OnGridReady += OnGridReadyHandler;
         else Debug.LogError("GameManager: could not find HexGridManager.");
     }
 
@@ -106,7 +107,7 @@ public class GameManager : MonoBehaviour
 
     private void HandleClick()
     {
-        if (CurrentState == GameState.GameOver) return;
+        if (CurrentState == GameState.GameOver || CurrentState == GameState.MainMenu) return;
         if (_waitingForCount) return; // count panel is open — ignore tile clicks
 
         if (UnityEngine.EventSystems.EventSystem.current != null && 
@@ -130,6 +131,13 @@ public class GameManager : MonoBehaviour
     // INITIALIZATION
     // -------------------------------------------------------------------------
 
+    private void OnGridReadyHandler()
+    {
+        _gridReady = true;
+        CurrentState = GameState.MainMenu;
+        UIManager.Instance?.ShowMainMenu();
+    }
+
     private void InitializeGame()
     {
         List<Tile> passable = new List<Tile>();
@@ -152,8 +160,7 @@ public class GameManager : MonoBehaviour
 
         AssignMissions();
         HexGridManager.Instance.RefreshAllBorders();
-        // no turn-start clip in new AudioManager
-        BeginInitialPlacement();
+        UIManager.Instance?.ShowLeaderSelection();
     }
 
     private static void Shuffle<T>(List<T> list)
@@ -687,6 +694,7 @@ public class GameManager : MonoBehaviour
 
     public void OnEndTurnButtonClicked()
     {
+        if (CurrentState == GameState.InitialPlacement) { OnRandomizePlacement(); return; }
         if (CurrentState == GameState.Attack)  { StartFortify(); return; }
         if (CurrentState == GameState.Fortify) { EndTurn(); return; }
     }
@@ -779,6 +787,37 @@ public class GameManager : MonoBehaviour
         _waitingForCount = false;
         ClearHighlights();
     }
+
+    // -------------------------------------------------------------------------
+    // MENU / RESTART
+    // -------------------------------------------------------------------------
+
+    public void StartGame()
+    {
+        if (!_gridReady) return;
+        InitializeGame();
+    }
+
+    public void BeginActualGame()
+    {
+        UIManager.Instance?.HideMenuScreens();
+        BeginInitialPlacement();
+    }
+
+    public void RestartGame()
+    {
+        UnityEngine.SceneManagement.SceneManager.LoadScene(
+            UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void ReturnToMenu()
+    {
+        CurrentState = GameState.MainMenu;
+        ClearSelection();
+        UIManager.Instance?.ShowMainMenu();
+    }
+
+    // -------------------------------------------------------------------------
 
     public string GetClanName(int pid) => pid >= 0 && pid < PlayerCount ? ClanNames[pid] : "Neutral";
     public int    GetExtraTroopsLeft(int pid) => _extraTroopsLeft[pid];
