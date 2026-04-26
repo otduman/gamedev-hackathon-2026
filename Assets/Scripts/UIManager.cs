@@ -616,17 +616,56 @@ public class UIManager : MonoBehaviour
 
         AudioManager.Instance?.PlayDiceSound();
 
-        for (int c = 0; c < 10; c++)
+        RectTransform[] allRects = new RectTransform[atkCount + defCount];
+        int rIdx = 0;
+        foreach (var l in atkLabels) allRects[rIdx++] = l != null ? l.transform.parent as RectTransform : null;
+        foreach (var l in defLabels) allRects[rIdx++] = l != null ? l.transform.parent as RectTransform : null;
+
+        // Phase 1: Monopoly-style shake — fast at first, progressively slower
+        float[] shakeIntervals = { 0.035f, 0.035f, 0.04f, 0.04f, 0.05f, 0.06f, 0.075f, 0.095f, 0.12f, 0.16f };
+        foreach (float interval in shakeIntervals)
         {
             foreach (var l in atkLabels) if (l) l.text = Random.Range(1, 7).ToString();
             foreach (var l in defLabels) if (l) l.text = Random.Range(1, 7).ToString();
-            yield return new WaitForSeconds(0.07f);
+            foreach (var rt in allRects)
+            {
+                if (rt == null) continue;
+                rt.localRotation = Quaternion.Euler(0f, 0f, Random.Range(-28f, 28f));
+                rt.localScale    = Vector3.one * Random.Range(0.88f, 1.12f);
+            }
+            yield return new WaitForSeconds(interval);
         }
 
+        // Snap to final values
         for (int i = 0; i < atkCount; i++) if (atkLabels[i]) atkLabels[i].text = result.AttackerRolls[i].ToString();
         for (int i = 0; i < defCount; i++) if (defLabels[i]) defLabels[i].text = result.DefenderRolls[i].ToString();
 
-        yield return new WaitForSeconds(0.15f);
+        // Phase 2: Pop reveal — bounce scale to 1.55 then settle to 1.0, rotation eases to 0
+        const float popDuration = 0.32f;
+        float popT = 0f;
+        while (popT < popDuration)
+        {
+            popT += Time.deltaTime;
+            float u = Mathf.Clamp01(popT / popDuration);
+            float scale = u < 0.5f
+                ? Mathf.Lerp(1.05f, 1.55f, u * 2f)
+                : Mathf.Lerp(1.55f, 1f,    (u - 0.5f) * 2f);
+            foreach (var rt in allRects)
+            {
+                if (rt == null) continue;
+                rt.localRotation = Quaternion.Lerp(rt.localRotation, Quaternion.identity, 0.35f);
+                rt.localScale    = Vector3.one * scale;
+            }
+            yield return null;
+        }
+        foreach (var rt in allRects)
+        {
+            if (rt == null) continue;
+            rt.localRotation = Quaternion.identity;
+            rt.localScale    = Vector3.one;
+        }
+
+        yield return new WaitForSeconds(0.1f);
 
         int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : atkCount;
         int pairs   = Mathf.Min(atkUsed, defCount);

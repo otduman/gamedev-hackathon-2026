@@ -300,6 +300,7 @@ MonoBehaviour:
   rockPrefabs:
   - {fileID: 919132149155446097, guid: 6ec3033eac0cafd43a4f6b82027f777b, type: 3}
   hillPrefabs: []
+  mountainDecoPrefabs: []
   mapRadius: 3
   hexSize: 1
 --- !u!4 &1066269503

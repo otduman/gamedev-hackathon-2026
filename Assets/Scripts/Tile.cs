@@ -241,24 +241,180 @@ public class Tile : MonoBehaviour
         if (leg != null && leg.clip != null) leg.Play();
     }
 
-    public void PlayAttackAnimation() => StartCoroutine(TemporaryAnim(1, 1.1f));
-    public void PlayWalkAnimation()   => StartCoroutine(TemporaryAnim(2, 0.7f));
+    public void PlayAttackAnimation() => StartCoroutine(TemporaryAnim("Attack", 1, 1.1f));
+    public void PlayWalkAnimation()   => StartCoroutine(TemporaryAnim("Walk",   2, 0.7f));
 
-    private IEnumerator TemporaryAnim(int idx, float dur)
+    // Duration constants so callers can match their wait times.
+    public const float WalkAnimDuration   = 0.7f;
+    public const float AttackAnimDuration = 1.1f;
+    public const float TravelDuration     = 1.0f;
+
+    // Spawns a single warrior at `worldFrom`, plays the walking animation from
+    // Assets/animation/Animation_Walking_withSkin.fbx (or the prefab's Mecanim Walk
+    // clip if available), lerps it to `worldTo` over `duration` seconds with a
+    // bounce + sway for liveliness, then destroys it.
+    public IEnumerator SpawnTraveler(Vector3 worldFrom, Vector3 worldTo, float duration)
+    {
+        GameObject traveler;
+        if (warriorPrefab != null)
+        {
+            traveler = Instantiate(warriorPrefab);
+            traveler.transform.localScale = Vector3.one * WarriorScale;
+        }
+        else
+        {
+            traveler = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            traveler.transform.localScale = new Vector3(0.13f, 0.18f, 0.13f);
+        }
+
+        foreach (Collider c in traveler.GetComponentsInChildren<Collider>(true)) Destroy(c);
+
+        Vector3 yOff = new Vector3(0f, WarriorYOffset, 0f);
+        traveler.transform.position = worldFrom + yOff;
+
+        Vector3 flatDir = worldTo - worldFrom; flatDir.y = 0f;
+        Quaternion baseRot = flatDir.sqrMagnitude > 0.0001f
+            ? Quaternion.LookRotation(flatDir.normalized)
+            : traveler.transform.rotation;
+        traveler.transform.rotation = baseRot;
+
+        ApplyOwnerTintToObject(traveler);
+        StartWalkLoopOn(traveler);
+
+        float t = 0f;
+        while (t < duration && traveler != null)
+        {
+            t += Time.deltaTime;
+            float u = Mathf.Clamp01(t / duration);
+
+            // Travel along a slight arc so it feels like real walking, not a slide.
+            Vector3 pos = Vector3.Lerp(worldFrom, worldTo, u) + yOff;
+            pos.y += Mathf.Sin(u * Mathf.PI) * 0.10f;            // overall hop
+            pos.y += Mathf.Sin(u * Mathf.PI * 8f) * 0.018f;      // step bob
+
+            // Subtle body sway — left/right rocking as the soldier strides.
+            float sway = Mathf.Sin(u * Mathf.PI * 8f) * 4f;
+            traveler.transform.SetPositionAndRotation(pos, baseRot * Quaternion.Euler(0f, 0f, sway));
+
+            yield return null;
+        }
+
+        if (traveler != null) Destroy(traveler);
+    }
+
+    // Drives a looping walk on the given object. Tries Mecanim's Walk clip first,
+    // and if none is found loads Animation_Walking_withSkin.fbx from Assets/animation/
+    // and plays it via the Legacy Animation component (disabling Mecanim so it
+    // doesn't fight the legacy driver).
+    private static void StartWalkLoopOn(GameObject obj)
+    {
+        if (obj == null) return;
+
+        Animator anim = obj.GetComponentInChildren<Animator>(true);
+        if (anim != null && anim.runtimeAnimatorController != null)
+        {
+            foreach (var c in anim.runtimeAnimatorController.animationClips)
+            {
+                if (c == null) continue;
+                if (c.name.IndexOf("Walk", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    anim.speed = 1f;
+                    anim.Play(c.name, 0, 0f);
+                    anim.Update(0f);
+                    return;
+                }
+            }
+        }
+
+        // Mecanim has no walk clip — load the FBX explicitly and drive via Legacy.
+        AnimationClip walkClip = LoadLegacyClipByKeyword("Walk");
+        if (walkClip == null) return;
+        walkClip.wrapMode = WrapMode.Loop;
+
+        if (anim != null) anim.enabled = false;
+
+        GameObject host = anim != null ? anim.gameObject : obj;
+        Animation legAnim = host.GetComponent<Animation>();
+        if (legAnim == null) legAnim = host.AddComponent<Animation>();
+        if (legAnim.GetClip(walkClip.name) == null) legAnim.AddClip(walkClip, walkClip.name);
+        legAnim.clip             = walkClip;
+        legAnim.wrapMode         = WrapMode.Loop;
+        legAnim.playAutomatically = true;
+        legAnim.Play(walkClip.name);
+    }
+
+    private IEnumerator TemporaryAnim(string keyword, int fallbackIdx, float dur)
     {
         foreach (GameObject w in _activeWarriors)
         {
             if (w == null) continue;
+
+            // --- Mecanim path: search by name keyword, fall back to index ---
             Animator anim = w.GetComponentInChildren<Animator>(true);
             if (anim != null && anim.runtimeAnimatorController != null)
             {
                 var clips = anim.runtimeAnimatorController.animationClips;
-                if (clips.Length > idx) anim.Play(clips[idx].name);
+                AnimationClip target = null;
+                foreach (var c in clips)
+                    if (c.name.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    { target = c; break; }
+                if (target == null && clips.Length > fallbackIdx) target = clips[fallbackIdx];
+                if (target != null) anim.Play(target.name);
+                continue;
+            }
+
+            // --- Legacy Animation path: find clip already registered or load from FBX ---
+            Animation legAnim = w.GetComponentInChildren<Animation>(true);
+            if (legAnim == null) continue;
+
+            // Check if the clip is already registered on this Animation component.
+            bool found = false;
+            foreach (AnimationState state in legAnim)
+            {
+                if (state.name.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                { legAnim.Play(state.name); found = true; break; }
+            }
+            if (!found)
+            {
+                AnimationClip clip = LoadLegacyClipByKeyword(keyword);
+                if (clip != null)
+                {
+                    if (legAnim.GetClip(clip.name) == null) legAnim.AddClip(clip, clip.name);
+                    legAnim.Play(clip.name);
+                }
             }
         }
         yield return new WaitForSeconds(dur);
         foreach (GameObject w in _activeWarriors)
             if (w != null) PlayIdleAnimation(w);
+    }
+
+    // Loads an AnimationClip from the project FBX files by keyword (Editor only).
+    private static AnimationClip LoadLegacyClipByKeyword(string keyword)
+    {
+#if UNITY_EDITOR
+        string[] candidates = {
+            "Assets/animation/Animation_Walking_withSkin.fbx",
+            "Assets/animation/Animation_Attack_withSkin.fbx",
+            "Assets/animation/Animation_Alert_withSkin.fbx",
+            "Assets/KayKit/Meshy_AI_biped_Animation_Walking_withSkin.fbx",
+        };
+        foreach (string path in candidates)
+        {
+            if (path.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            foreach (var asset in UnityEditor.AssetDatabase.LoadAllAssetsAtPath(path))
+            {
+                if (asset is AnimationClip c && !c.name.StartsWith("__preview__"))
+                {
+                    // Legacy Animation requires the clip to have legacy=true.
+                    AnimationClip copy = UnityEngine.Object.Instantiate(c);
+                    copy.legacy = true;
+                    return copy;
+                }
+            }
+        }
+#endif
+        return null;
     }
 
     private void ShowCountLabel(int n) { if (cubeCountText != null) { cubeCountText.text = n.ToString(); cubeCountText.gameObject.SetActive(true); } }

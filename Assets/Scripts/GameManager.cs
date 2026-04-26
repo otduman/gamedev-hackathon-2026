@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -503,40 +504,64 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState == GameState.PostConquest)
         {
-            if (_postConquestSource != null && _postConquestDest != null)
-            {
-                int advance = Mathf.Clamp(count, 1, _postConquestSource.CubeCount - 1);
-                _postConquestSource.PlayWalkAnimation();
-                _postConquestSource.RemoveCubes(advance);
-                _postConquestDest.AddCubes(advance);
-                _postConquestSource.UpdateVisuals();
-                _postConquestDest.UpdateVisuals();
-            }
-            _postConquestSource = null; _postConquestDest = null;
-            CurrentState = GameState.Attack;
             UIManager.Instance?.HideMigrationCount();
-            UIManager.Instance?.UpdateUI();
-            UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+            if (_postConquestSource != null && _postConquestDest != null)
+                StartCoroutine(ExecutePostConquestAdvance(count));
+            else
+            {
+                _postConquestSource = null; _postConquestDest = null;
+                CurrentState = GameState.Attack;
+                UIManager.Instance?.UpdateUI();
+                UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+            }
             return;
         }
 
         if (CurrentState == GameState.Fortify && _fortifySource != null && _fortifyDest != null)
         {
-            int actual = Mathf.Clamp(count, 1, _fortifySource.CubeCount - 1);
-            _fortifySource.PlayWalkAnimation();
-            _fortifySource.RemoveCubes(actual);
-            _fortifyDest.AddCubes(actual);
-            _fortifySource.UpdateVisuals();
-            _fortifyDest.UpdateVisuals();
-            _fortifyUsed     = true;
-            _fortifySource   = null;
-            _fortifyDest     = null;
-            _waitingForCount = false;
-            ClearSelection();
             UIManager.Instance?.HideMigrationCount();
-            UIManager.Instance?.UpdateUI();
-            UIManager.Instance?.ShowMessage("Fortify complete. Press End Turn.");
+            StartCoroutine(ExecuteFortifyMove(count));
         }
+    }
+
+    private IEnumerator ExecutePostConquestAdvance(int count)
+    {
+        Tile source  = _postConquestSource;
+        Tile dest    = _postConquestDest;
+        int  advance = Mathf.Clamp(count, 1, source.CubeCount - 1);
+        source.PlayWalkAnimation();
+        yield return source.SpawnTraveler(source.transform.position, dest.transform.position, Tile.TravelDuration);
+        source.RemoveCubes(advance);
+        dest.AddCubes(advance);
+        source.UpdateVisuals();
+        dest.UpdateVisuals();
+        dest.PlayWalkAnimation();
+        _postConquestSource = null;
+        _postConquestDest   = null;
+        CurrentState = GameState.Attack;
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+    }
+
+    private IEnumerator ExecuteFortifyMove(int count)
+    {
+        Tile source = _fortifySource;
+        Tile dest   = _fortifyDest;
+        int  actual = Mathf.Clamp(count, 1, source.CubeCount - 1);
+        source.PlayWalkAnimation();
+        yield return source.SpawnTraveler(source.transform.position, dest.transform.position, Tile.TravelDuration);
+        source.RemoveCubes(actual);
+        dest.AddCubes(actual);
+        source.UpdateVisuals();
+        dest.UpdateVisuals();
+        dest.PlayWalkAnimation();
+        _fortifyUsed     = true;
+        _fortifySource   = null;
+        _fortifyDest     = null;
+        _waitingForCount = false;
+        ClearSelection();
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowMessage("Fortify complete. Press End Turn.");
     }
 
     public void OnMigrationCountCancel()
