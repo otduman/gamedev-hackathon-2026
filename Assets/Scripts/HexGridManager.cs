@@ -209,10 +209,13 @@ public class HexGridManager : MonoBehaviour
 
     private void GenerateHexagonalMap()
     {
-        for (int q = -mapRadius; q <= mapRadius; q++)
+        // Generate two extra rings of mountain border beyond the playable area.
+        int genRadius = mapRadius + 2;
+
+        for (int q = -genRadius; q <= genRadius; q++)
         {
-            int r1 = Mathf.Max(-mapRadius, -q - mapRadius);
-            int r2 = Mathf.Min(mapRadius,  -q + mapRadius);
+            int r1 = Mathf.Max(-genRadius, -q - genRadius);
+            int r2 = Mathf.Min(genRadius,  -q + genRadius);
 
             for (int r = r1; r <= r2; r++)
             {
@@ -228,8 +231,14 @@ public class HexGridManager : MonoBehaviour
                     tileGo = Instantiate(selectedPrefab, worldPos, selectedPrefab.transform.rotation, transform);
                     tileGo.name = $"Tile_{q}_{r}";
                     tileGo.transform.Rotate(0, Random.Range(0, 6) * 60f, 0, Space.World);
+
+                    int dist = HexDistanceFromOrigin(q, r);
                     if (terrain == TerrainType.Mountain)
-                        tileGo.transform.localScale = new Vector3(1f, 0.62f, 1f);
+                    {
+                        // Outer border mountains are tall; inner ones are moderate.
+                        float yScale = dist > mapRadius ? 1.5f : 1.2f;
+                        tileGo.transform.localScale = new Vector3(1f, yScale, 1f);
+                    }
 
                     Tile tile = tileGo.GetComponent<Tile>();
                     if (tile == null) { Debug.LogError($"Prefab '{selectedPrefab.name}' missing Tile component."); Destroy(tileGo); continue; }
@@ -465,17 +474,15 @@ public class HexGridManager : MonoBehaviour
         int   dist = HexDistanceFromOrigin(q, r);
         float roll = Random.value;
 
+        // Anything at or beyond the playable radius is mountain border.
+        if (dist >= mapRadius) return TerrainType.Mountain;
+
         if (dist <= 2) return TerrainType.Plain;
 
-        if (dist == 3)
-        {
-            if (roll < 0.72f) return TerrainType.Plain;
-            if (roll < 0.88f) return TerrainType.Mountain;
-            return TerrainType.Water;
-        }
-
-        // Outer ring is always Mountain — creates a natural border range.
-        return TerrainType.Mountain;
+        // dist == 3 (transition zone)
+        if (roll < 0.72f) return TerrainType.Plain;
+        if (roll < 0.88f) return TerrainType.Mountain;
+        return TerrainType.Water;
     }
 
     private TerrainType RemapTerrainToAvailable(TerrainType terrain)
