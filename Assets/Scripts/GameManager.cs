@@ -60,7 +60,22 @@ public class GameManager : MonoBehaviour
     private Tile _postConquestDest   = null;
 
     private List<Tile> _highlightedTiles = new List<Tile>();
-    private bool _gridReady = false;
+    private bool  _gridReady      = false;
+    private float _idleTimer      = 0f;
+    private bool  _idleHintActive = false;
+    private const float IdleHintDelay = 12f;
+
+    private static readonly string[] IdleHints =
+    {
+        "",  // MainMenu
+        "Click a highlighted territory to place a troop — or press SKIP TURN",
+        "Click your territories to place reinforcement troops",
+        "Select one of your territories with 2+ troops, then click an enemy",
+        "",  // CombatSetup
+        "",  // PostConquest
+        "Move troops between connected territories, or press END TURN to skip",
+        "",  // GameOver
+    };
 
     // -------------------------------------------------------------------------
 
@@ -83,6 +98,33 @@ public class GameManager : MonoBehaviour
         if (Mouse.current == null) return;
         HandleHover();
         if (Mouse.current.leftButton.wasPressedThisFrame) HandleClick();
+        TickIdleHint();
+    }
+
+    private void TickIdleHint()
+    {
+        bool actionable = CurrentState == GameState.InitialPlacement
+                       || CurrentState == GameState.Reinforce
+                       || CurrentState == GameState.Attack
+                       || CurrentState == GameState.Fortify;
+        if (!actionable) { _idleTimer = 0f; _idleHintActive = false; return; }
+
+        _idleTimer += Time.deltaTime;
+        if (!_idleHintActive && _idleTimer >= IdleHintDelay)
+        {
+            _idleHintActive = true;
+            int idx = (int)CurrentState;
+            string hint = idx >= 0 && idx < IdleHints.Length ? IdleHints[idx] : "";
+            if (!string.IsNullOrEmpty(hint))
+                UIManager.Instance?.ShowIdleHint(hint);
+        }
+    }
+
+    private void ResetIdleTimer()
+    {
+        _idleTimer      = 0f;
+        _idleHintActive = false;
+        UIManager.Instance?.HideIdleHint();
     }
 
     private void HandleHover()
@@ -109,6 +151,7 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState == GameState.GameOver || CurrentState == GameState.MainMenu) return;
         if (_waitingForCount) return; // count panel is open — ignore tile clicks
+        ResetIdleTimer();
 
         if (UnityEngine.EventSystems.EventSystem.current != null && 
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
@@ -694,6 +737,7 @@ public class GameManager : MonoBehaviour
 
     public void OnEndTurnButtonClicked()
     {
+        ResetIdleTimer();
         if (CurrentState == GameState.InitialPlacement) { OnRandomizePlacement(); return; }
         if (CurrentState == GameState.Attack)  { StartFortify(); return; }
         if (CurrentState == GameState.Fortify) { EndTurn(); return; }

@@ -451,12 +451,15 @@ public class Tile : MonoBehaviour
 
         _countBadgeRoot = new GameObject("CountBadge");
         _countBadgeRoot.transform.SetParent(transform, false);
-        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 0.38f;
+        // Position above the tallest warrior model heads (warrior scale 0.6, model ~3u tall)
+        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 2.1f;
         _countBadgeRoot.transform.localPosition = new Vector3(0f, yPos, 0f);
         _countBadgeRoot.transform.localScale    = Vector3.one * 0.010f;
 
         Canvas canvas = _countBadgeRoot.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.renderMode      = RenderMode.WorldSpace;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder    = 99;   // draw on top of 3D geometry
         RectTransform crt = _countBadgeRoot.GetComponent<RectTransform>();
         crt.sizeDelta = new Vector2(58f, 26f);
 

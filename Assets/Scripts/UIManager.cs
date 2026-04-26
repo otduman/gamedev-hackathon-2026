@@ -70,6 +70,11 @@ public class UIManager : MonoBehaviour
     private TextMeshProUGUI _phaseText;
     private TextMeshProUGUI _messageText;
 
+    // Idle hint badge
+    private GameObject      _idleHintPanel;
+    private TextMeshProUGUI _idleHintText;
+    private Coroutine       _idleHintCoroutine;
+
     // Right panel (full-height sidebar)
     private Image[]           _rosterSlotBg  = new Image[4];
     private TextMeshProUGUI[] _rosterNames   = new TextMeshProUGUI[4];
@@ -240,6 +245,7 @@ public class UIManager : MonoBehaviour
         BuildCombatSetupPanel();
         BuildMigrationCountPanel();
         BuildPhaseBanner();
+        BuildIdleHintPanel();
         BuildMainMenu();
         BuildLeaderSelection();
 
@@ -693,14 +699,18 @@ public class UIManager : MonoBehaviour
     {
         _phaseBannerPanel = CreatePanel("PhaseBanner", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(480f, 80f));
-        _phaseBannerPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
-        _phaseBannerPanel.GetComponent<Image>().raycastTarget = false;
+            Vector2.zero, new Vector2(520f, 86f));
+        // Dark semi-transparent background — slightly larger than the text
+        Image bannerBg = _phaseBannerPanel.GetComponent<Image>();
+        bannerBg.color = new Color(0.04f, 0.03f, 0.02f, 0.82f);
+        bannerBg.raycastTarget = false;
+        AddGoldBorder(_phaseBannerPanel);
 
         _phaseBannerText = CreateTMPLabel("BannerText", _phaseBannerPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(460f, 70f), "", 38, FontStyles.Bold);
-        _phaseBannerText.alignment = TextAlignmentOptions.Center;
+            Vector2.zero, new Vector2(500f, 74f), "", 38, FontStyles.Bold);
+        _phaseBannerText.alignment  = TextAlignmentOptions.Center;
+        _phaseBannerText.color      = Color.white;
         _phaseBannerPanel.SetActive(false);
     }
 
@@ -933,14 +943,36 @@ public class UIManager : MonoBehaviour
     private IEnumerator PhaseBannerCoroutine(string label, Color color)
     {
         _phaseBannerText.text  = label;
-        _phaseBannerText.color = color;
+        _phaseBannerText.color = Color.white;  // always white — dark bg provides contrast
+        Image bannerBg = _phaseBannerPanel.GetComponent<Image>();
         _phaseBannerPanel.SetActive(true);
+
+        // Fade in (0.2 s)
         float t = 0f;
-        while (t < 0.18f) { t += Time.deltaTime; _phaseBannerText.alpha = t / 0.18f; yield return null; }
+        while (t < 0.20f)
+        {
+            t += Time.deltaTime;
+            float a = t / 0.20f;
+            _phaseBannerText.alpha = a;
+            if (bannerBg) bannerBg.color = new Color(0.04f, 0.03f, 0.02f, 0.82f * a);
+            yield return null;
+        }
         _phaseBannerText.alpha = 1f;
-        yield return new WaitForSeconds(0.75f);
+        if (bannerBg) bannerBg.color = new Color(0.04f, 0.03f, 0.02f, 0.82f);
+
+        // Hold (2.5 s)
+        yield return new WaitForSeconds(2.5f);
+
+        // Fade out (0.35 s)
         t = 0f;
-        while (t < 0.25f) { t += Time.deltaTime; _phaseBannerText.alpha = 1f - t / 0.25f; yield return null; }
+        while (t < 0.35f)
+        {
+            t += Time.deltaTime;
+            float a = 1f - t / 0.35f;
+            _phaseBannerText.alpha = a;
+            if (bannerBg) bannerBg.color = new Color(0.04f, 0.03f, 0.02f, 0.82f * a);
+            yield return null;
+        }
         _phaseBannerPanel.SetActive(false);
     }
 
@@ -1504,6 +1536,60 @@ public class UIManager : MonoBehaviour
     {
         if (_migrationCountText != null)
             _migrationCountText.text = $"{_migrationCount} / {_migrationCountMax}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Idle hint badge
+    // -------------------------------------------------------------------------
+
+    private void BuildIdleHintPanel()
+    {
+        _idleHintPanel = CreatePanel("IdleHintPanel", gameObject,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 90f), new Vector2(520f, 48f));
+        Image bg = _idleHintPanel.GetComponent<Image>();
+        bg.color = new Color(0.04f, 0.03f, 0.02f, 0.85f);
+        bg.raycastTarget = false;
+        AddGoldBorder(_idleHintPanel);
+
+        _idleHintText = CreateTMPLabel("IdleHintText", _idleHintPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(500f, 40f), "", 13, FontStyles.Normal);
+        _idleHintText.color     = _cream;
+        _idleHintText.alignment = TextAlignmentOptions.Center;
+
+        _idleHintPanel.SetActive(false);
+    }
+
+    public void ShowIdleHint(string message)
+    {
+        if (_idleHintPanel == null) return;
+        if (_idleHintCoroutine != null) StopCoroutine(_idleHintCoroutine);
+        _idleHintCoroutine = StartCoroutine(IdleHintCoroutine(message));
+    }
+
+    public void HideIdleHint()
+    {
+        if (_idleHintCoroutine != null) { StopCoroutine(_idleHintCoroutine); _idleHintCoroutine = null; }
+        if (_idleHintPanel != null) _idleHintPanel.SetActive(false);
+    }
+
+    private IEnumerator IdleHintCoroutine(string message)
+    {
+        if (_idleHintText != null) _idleHintText.text = message;
+        _idleHintPanel.SetActive(true);
+        Image bg = _idleHintPanel.GetComponent<Image>();
+
+        float t = 0f;
+        while (t < 0.25f) { t += Time.deltaTime; float a = t / 0.25f; _idleHintText.alpha = a; if (bg) bg.color = new Color(0.04f, 0.03f, 0.02f, 0.85f * a); yield return null; }
+        _idleHintText.alpha = 1f;
+
+        yield return new WaitForSeconds(4f);
+
+        t = 0f;
+        while (t < 0.4f) { t += Time.deltaTime; float a = 1f - t / 0.4f; _idleHintText.alpha = a; if (bg) bg.color = new Color(0.04f, 0.03f, 0.02f, 0.85f * a); yield return null; }
+        _idleHintPanel.SetActive(false);
+        _idleHintCoroutine = null;
     }
 
     // -------------------------------------------------------------------------
