@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 public enum TerrainType { Plain, Mountain, Water }
@@ -38,6 +39,11 @@ public class Tile : MonoBehaviour
 
     private static readonly Color _hoverTint    = new Color(0.95f, 0.95f, 0.80f, 1f);
     private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
+
+    // ── Count badge (world-space canvas, always faces camera) ────────────
+    private GameObject      _countBadgeRoot;
+    private Image           _countBadgeBg;
+    private TextMeshProUGUI _countBadgeTMP;
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
@@ -103,6 +109,7 @@ public class Tile : MonoBehaviour
             }
         }
         UpdateVisuals();
+        CreateCountBadge();
     }
 
     public void SetPrimitiveMeshRenderer(Renderer r)
@@ -176,11 +183,11 @@ public class Tile : MonoBehaviour
         Color tint = regionBase;
         
         if (_isSelected)
-            tint = Color.Lerp(regionBase, _selectedTint, 0.35f);
+            tint = Color.Lerp(regionBase, _selectedTint, 0.62f);
         else if (_isHighlighted)
-            tint = Color.Lerp(regionBase, _highlightColor, 0.25f);
+            tint = Color.Lerp(regionBase, _highlightColor, 0.52f);
         else if (_isHovered)
-            tint = Color.Lerp(regionBase, _hoverTint, 0.25f);
+            tint = Color.Lerp(regionBase, _hoverTint, 0.35f);
 
         if (_pulseIntensity > 0f)
             tint = Color.Lerp(tint, Color.white, _pulseIntensity);
@@ -217,8 +224,9 @@ public class Tile : MonoBehaviour
             _activeWarriors.Add(w);
         }
 
-        if (CubeCount > MaxWarriors) ShowCountLabel(CubeCount);
-        else                         HideCountLabel();
+        // Always show count badge so players can read troop numbers at a glance
+        if (CubeCount > 0) ShowCountLabel(CubeCount);
+        else               HideCountLabel();
     }
 
     private GameObject SpawnWarrior(Vector3 localPos)
@@ -435,8 +443,96 @@ public class Tile : MonoBehaviour
         return null;
     }
 
-    private void ShowCountLabel(int n) { if (cubeCountText != null) { cubeCountText.text = n.ToString(); cubeCountText.gameObject.SetActive(true); } }
-    private void HideCountLabel()      { if (cubeCountText != null) cubeCountText.gameObject.SetActive(false); }
+    // ── World-space count badge ───────────────────────────────────────────
+
+    private void CreateCountBadge()
+    {
+        if (Terrain == TerrainType.Water) return;
+
+        _countBadgeRoot = new GameObject("CountBadge");
+        _countBadgeRoot.transform.SetParent(transform, false);
+        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 0.38f;
+        _countBadgeRoot.transform.localPosition = new Vector3(0f, yPos, 0f);
+        _countBadgeRoot.transform.localScale    = Vector3.one * 0.010f;
+
+        Canvas canvas = _countBadgeRoot.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        RectTransform crt = _countBadgeRoot.GetComponent<RectTransform>();
+        crt.sizeDelta = new Vector2(58f, 26f);
+
+        // Background pill
+        GameObject bgGo = new GameObject("BG");
+        bgGo.transform.SetParent(_countBadgeRoot.transform, false);
+        RectTransform brt = bgGo.AddComponent<RectTransform>();
+        brt.anchorMin = Vector2.zero; brt.anchorMax = Vector2.one;
+        brt.offsetMin = brt.offsetMax = Vector2.zero;
+        _countBadgeBg = bgGo.AddComponent<Image>();
+        _countBadgeBg.color = new Color(0.07f, 0.05f, 0.03f, 0.88f);
+
+        // Border outline using 4 thin images
+        foreach (var (side, anMin, anMax, sz) in new (string, Vector2, Vector2, Vector2)[] {
+            ("L", new Vector2(0,0), new Vector2(0,1), new Vector2(1.5f,0)),
+            ("R", new Vector2(1,0), new Vector2(1,1), new Vector2(1.5f,0)),
+            ("T", new Vector2(0,1), new Vector2(1,1), new Vector2(0,1.5f)),
+            ("B", new Vector2(0,0), new Vector2(1,0), new Vector2(0,1.5f)),
+        })
+        {
+            GameObject edge = new GameObject(side);
+            edge.transform.SetParent(_countBadgeRoot.transform, false);
+            RectTransform ert = edge.AddComponent<RectTransform>();
+            ert.anchorMin = anMin; ert.anchorMax = anMax;
+            ert.pivot = new Vector2(0.5f, 0.5f);
+            ert.anchoredPosition = Vector2.zero; ert.sizeDelta = sz;
+            Image ei = edge.AddComponent<Image>();
+            ei.color = new Color(0.69f, 0.53f, 0.19f, 0.80f); // brass border
+        }
+
+        // Count text
+        GameObject tGo = new GameObject("Text");
+        tGo.transform.SetParent(_countBadgeRoot.transform, false);
+        RectTransform trt = tGo.AddComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+        trt.offsetMin = trt.offsetMax = Vector2.zero;
+        _countBadgeTMP = tGo.AddComponent<TextMeshProUGUI>();
+        _countBadgeTMP.fontSize   = 16;
+        _countBadgeTMP.fontStyle  = FontStyles.Bold;
+        _countBadgeTMP.color      = new Color(0.93f, 0.88f, 0.77f);
+        _countBadgeTMP.alignment  = TextAlignmentOptions.Center;
+        _countBadgeTMP.raycastTarget = false;
+
+        _countBadgeRoot.SetActive(false);
+    }
+
+    private void LateUpdate()
+    {
+        // Billboard: always face camera so the badge is readable from any angle
+        if (_countBadgeRoot != null && _countBadgeRoot.activeSelf && Camera.main != null)
+            _countBadgeRoot.transform.rotation = Camera.main.transform.rotation;
+    }
+
+    private void ShowCountLabel(int n)
+    {
+        // Badge canvas (preferred)
+        if (_countBadgeTMP != null)
+        {
+            _countBadgeTMP.text = n.ToString();
+            if (_countBadgeBg != null && OwnerPlayerId >= 0 && OwnerPlayerId < PlayerTints.Length)
+            {
+                Color pc = PlayerTints[OwnerPlayerId];
+                _countBadgeBg.color = new Color(pc.r * 0.22f, pc.g * 0.22f, pc.b * 0.22f, 0.92f);
+            }
+            _countBadgeRoot.SetActive(true);
+            return;
+        }
+        // Legacy fallback
+        if (cubeCountText != null) { cubeCountText.text = n.ToString(); cubeCountText.gameObject.SetActive(true); }
+    }
+
+    private void HideCountLabel()
+    {
+        if (_countBadgeRoot != null) _countBadgeRoot.SetActive(false);
+        if (cubeCountText != null)   cubeCountText.gameObject.SetActive(false);
+    }
 
     private void UpdateYurtVisuals()
     {

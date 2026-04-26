@@ -1081,19 +1081,25 @@ public class UIManager : MonoBehaviour
         dLabel.color = defColor;
         dLabel.alignment = TextAlignmentOptions.Center;
 
-        const float dieSize = 58f, dieStep = 66f, diceRowY = 10f;
+        const float dieSize = 58f, dieStep = 68f, diceRowY = 10f;
         int atkCount = result.AttackerRolls.Length, defCount = result.DefenderRolls.Length;
 
         TextMeshProUGUI[] atkLabels = new TextMeshProUGUI[atkCount];
         TextMeshProUGUI[] defLabels = new TextMeshProUGUI[defCount];
 
-        // Attacker dice fan from center-left, defender dice fan from center-right
-        float atkStart = -(dieStep * (atkCount - 1) * 0.5f) - dieStep * 0.5f - 20f;
-        float defStart =  (dieStep * (defCount - 1) * 0.5f) + dieStep * 0.5f + 20f;
+        // Keep each side strictly in its half of the 600px panel (±300).
+        // Attacker group centred at x=-148, defender at x=+148.
+        const float atkCX = -148f, defCX = 148f;
         for (int i = 0; i < atkCount; i++)
-            atkLabels[i] = SpawnDie($"AtkDie{i}", _diceCombatPanel, -1, new Vector2(atkStart + i * dieStep, diceRowY), atkColor);
+        {
+            float x = atkCX + (i - (atkCount - 1) * 0.5f) * dieStep;
+            atkLabels[i] = SpawnDie($"AtkDie{i}", _diceCombatPanel, -1, new Vector2(x, diceRowY), atkColor);
+        }
         for (int i = 0; i < defCount; i++)
-            defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2(defStart - i * dieStep, diceRowY), defColor);
+        {
+            float x = defCX + (i - (defCount - 1) * 0.5f) * dieStep;
+            defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2(x, diceRowY), defColor);
+        }
 
         AudioManager.Instance?.PlayDiceSound();
 
@@ -1146,21 +1152,18 @@ public class UIManager : MonoBehaviour
         int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : atkCount;
         int pairs   = Mathf.Min(atkUsed, defCount);
 
-        // Attacker die starts, mirrored from the center-left position used above
-        float atkS = -(dieStep * (atkCount - 1) * 0.5f) - dieStep * 0.5f - 20f;
-        float defS =  (dieStep * (defCount - 1)  * 0.5f) + dieStep * 0.5f + 20f;
-
+        // Win/loss indicators shown above each attacker die (sorted high→low, pairs matched)
         for (int i = 0; i < pairs; i++)
         {
-            int di = pairs - 1 - i;
-            int av = result.AttackerRolls[i], dv = result.DefenderRolls[di];
+            int di  = pairs - 1 - i;
+            int av  = result.AttackerRolls[i], dv = result.DefenderRolls[di];
             bool win = av > dv;
-            string sym = av == dv ? "=" : win ? "▲" : "▼";
+            string sym = win ? "▲" : "▼";
             Color  sc  = win ? new Color(0.2f, 0.85f, 0.2f) : new Color(0.9f, 0.2f, 0.2f);
-            float indX = (atkS + i * dieStep + defS - di * dieStep) * 0.5f;
-            TextMeshProUGUI ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
+            float atkDieX = atkCX + (i - (atkCount - 1) * 0.5f) * dieStep;
+            var ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(indX, diceRowY + dieSize * 0.5f + 16f), new Vector2(46f, 22f),
+                new Vector2(atkDieX, diceRowY + dieSize * 0.5f + 14f), new Vector2(46f, 22f),
                 sym, 16, FontStyles.Bold);
             ind.color = sc;
         }
