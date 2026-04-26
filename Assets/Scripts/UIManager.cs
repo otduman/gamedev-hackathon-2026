@@ -173,12 +173,13 @@ public class UIManager : MonoBehaviour
         DontDestroyOnLoad(esGo);
         esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
 
-        System.Type nisType = System.Type.GetType(
-            "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
-        if (nisType != null)
-            esGo.AddComponent(nisType);
-        else
-            esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        // The project uses the new Input System — add its UI module directly.
+        // StandaloneInputModule does NOT work when the new Input System is active.
+#if ENABLE_INPUT_SYSTEM
+        esGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#else
+        esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+#endif
     }
 
     private void LoadFonts()
@@ -1208,7 +1209,7 @@ public class UIManager : MonoBehaviour
         _migrationCountPanel = CreatePanel("MigrationCountPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(420f, 220f));
-        _migrationCountPanel.GetComponent<Image>().color = new Color(0.047f, 0.082f, 0.047f, 0.94f);
+        _migrationCountPanel.GetComponent<Image>().color = _panelColor;
         AddGoldBorder(_migrationCountPanel);
 
         _migrationCountTitle = CreateTMPLabel("Title", _migrationCountPanel,

@@ -107,10 +107,11 @@ public class HexGridManager : MonoBehaviour
         GameObject esGo = new GameObject("EventSystem");
         DontDestroyOnLoad(esGo);
         esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
-        System.Type nisType = System.Type.GetType(
-            "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
-        if (nisType != null) esGo.AddComponent(nisType);
-        else esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+#if ENABLE_INPUT_SYSTEM
+        esGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#else
+        esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+#endif
     }
 
     // Automatically loads all KayKit assets so no manual Inspector setup is needed.

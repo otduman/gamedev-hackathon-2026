@@ -150,9 +150,9 @@ public class Tile : MonoBehaviour
         meshRenderer.GetPropertyBlock(_propBlock);
 
         // Base: tint the tile by its continent colour (Risk-style — the TILE shows the region,
-        // the PIECES and BORDERS show the owner).
+        // the PIECES and BORDERS show the owner).  65 % blend for clearly visible regions.
         Color regionBase = ContinentId >= 0 && ContinentId < RegionTints.Length
-            ? Color.Lerp(_baseColor, RegionTints[ContinentId], 0.38f)
+            ? Color.Lerp(_baseColor, RegionTints[ContinentId], 0.65f)
             : _baseColor;
 
         Color tint;
