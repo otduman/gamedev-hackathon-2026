@@ -38,7 +38,7 @@ public class Tile : MonoBehaviour
     private float _pulseIntensity = 0f;
 
     private static readonly Color _hoverTint    = new Color(0.95f, 0.95f, 0.80f, 1f);
-    private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
+    private static readonly Color _selectedTint = new Color(0.20f, 0.95f, 1.00f, 1f); // bright cyan — no clan conflict
 
     // ── Count badge (world-space canvas, always faces camera) ────────────
     private GameObject      _countBadgeRoot;
@@ -466,17 +466,17 @@ public class Tile : MonoBehaviour
 
         _countBadgeRoot = new GameObject("CountBadge");
         _countBadgeRoot.transform.SetParent(transform, false);
-        // Sit low — near warrior's waist/feet, not over the head/torso
-        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 0.15f;
+        // Lifted ABOVE warrior heads so it doesn't get occluded by their meshes
+        float yPos = (Terrain == TerrainType.Mountain ? MountainYLift : 0f) + 1.45f;
         _countBadgeRoot.transform.localPosition = new Vector3(0f, yPos, 0f);
-        _countBadgeRoot.transform.localScale    = Vector3.one * 0.008f;
+        _countBadgeRoot.transform.localScale    = Vector3.one * 0.013f;
 
         Canvas canvas = _countBadgeRoot.AddComponent<Canvas>();
         canvas.renderMode      = RenderMode.WorldSpace;
         canvas.overrideSorting = true;
         canvas.sortingOrder    = 99;   // draw on top of other world-space canvases
         RectTransform crt = _countBadgeRoot.GetComponent<RectTransform>();
-        crt.sizeDelta = new Vector2(38f, 20f);
+        crt.sizeDelta = new Vector2(54f, 28f);
 
         Material onTopMat = GetAlwaysOnTopUIMat();
 
@@ -516,7 +516,7 @@ public class Tile : MonoBehaviour
         trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
         trt.offsetMin = trt.offsetMax = Vector2.zero;
         _countBadgeTMP = tGo.AddComponent<TextMeshProUGUI>();
-        _countBadgeTMP.fontSize   = 12;
+        _countBadgeTMP.fontSize   = 18;
         _countBadgeTMP.fontStyle  = FontStyles.Bold;
         _countBadgeTMP.color      = new Color(0.93f, 0.88f, 0.77f);
         _countBadgeTMP.alignment  = TextAlignmentOptions.Center;

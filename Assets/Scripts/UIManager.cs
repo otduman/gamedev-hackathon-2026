@@ -1107,7 +1107,7 @@ public class UIManager : MonoBehaviour
         var header = CreateTMPLabel("Header", _diceCombatPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -14f), new Vector2(560f, 30f),
-            $"{atkName}  ⚔  {defName}", 17, FontStyles.Bold);
+            $"{atkName}  vs  {defName}", 17, FontStyles.Bold);
         header.color = _goldColor;
 
         TextMeshProUGUI aLabel = CreateTMPLabel("AtkLabel", _diceCombatPanel,

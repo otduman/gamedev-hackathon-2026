@@ -34,7 +34,7 @@ public class GameManager : MonoBehaviour
 
     private static readonly Color _attackHighlight   = new Color(1.00f, 0.55f, 0.00f, 1f);
     private static readonly Color _fortifyHighlight  = new Color(0.25f, 1.00f, 0.50f, 1f);
-    private static readonly Color _reinforceHighlight = new Color(1.00f, 0.85f, 0.10f, 1f);
+    private static readonly Color _reinforceHighlight = new Color(0.95f, 0.30f, 0.85f, 1f); // bright pink — no clan conflict
 
     // Missions
     private Mission[] _playerMissions = new Mission[PlayerCount];

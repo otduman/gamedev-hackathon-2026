@@ -19,15 +19,15 @@ MonoBehaviour:
     m_StripRuntimeDebugShaders: 1
   m_URPShaderStrippingSetting:
     m_Version: 0
-    m_StripUnusedPostProcessingVariants: 1
-    m_StripUnusedVariants: 1
-    m_StripScreenCoordOverrideVariants: 1
+    m_StripUnusedPostProcessingVariants: 0
+    m_StripUnusedVariants: 0
+    m_StripScreenCoordOverrideVariants: 0
   m_ShaderVariantLogLevel: 0
   m_ExportShaderVariants: 1
-  m_StripDebugVariants: 1
-  m_StripUnusedPostProcessingVariants: 1
-  m_StripUnusedVariants: 1
-  m_StripScreenCoordOverrideVariants: 1
+  m_StripDebugVariants: 0
+  m_StripUnusedPostProcessingVariants: 0
+  m_StripUnusedVariants: 0
+  m_StripScreenCoordOverrideVariants: 0
   supportRuntimeDebugDisplay: 0
   m_Settings:
     m_SettingsList:
@@ -68,7 +68,22 @@ MonoBehaviour:
       - rid: 1426388197151604752
       - rid: 1426388197151604753
     m_RuntimeSettings:
-      m_List: []
+      m_List:
+      - rid: 6852985685364965378
+      - rid: 6852985685364965379
+      - rid: 6852985685364965380
+      - rid: 6852985685364965381
+      - rid: 6852985685364965384
+      - rid: 6852985685364965392
+      - rid: 6852985685364965394
+      - rid: 8712630790384254976
+      - rid: 1426388197151604744
+      - rid: 1426388197151604745
+      - rid: 1426388197151604746
+      - rid: 1426388197151604747
+      - rid: 1426388197151604748
+      - rid: 1426388197151604750
+      - rid: 1426388197151604752
   m_AssetVersion: 10
   m_ObsoleteDefaultVolumeProfile: {fileID: 0}
   m_RenderingLayerNames:
@@ -282,9 +297,9 @@ MonoBehaviour:
       type: {class: URPShaderStrippingSetting, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:
         m_Version: 0
-        m_StripUnusedPostProcessingVariants: 1
-        m_StripUnusedVariants: 1
-        m_StripScreenCoordOverrideVariants: 1
+        m_StripUnusedPostProcessingVariants: 0
+        m_StripUnusedVariants: 0
+        m_StripScreenCoordOverrideVariants: 0
     - rid: 6852985685364965377
       type: {class: UniversalRenderPipelineEditorShaders, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:

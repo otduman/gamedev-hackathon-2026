@@ -806,7 +806,13 @@ public class HexGridManager : MonoBehaviour
         Destroy(plane.GetComponent<Collider>());
 
         Renderer r = plane.GetComponent<Renderer>();
-        Shader sh  = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Texture") ?? Shader.Find("Standard");
+        // Try multiple shaders in order — URP first, then built-in fallbacks that
+        // ship in Always Included Shaders so they're guaranteed in builds.
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Texture")
+                    ?? Shader.Find("Sprites/Default")
+                    ?? Shader.Find("UI/Default")
+                    ?? Shader.Find("Standard");
         if (sh == null)
         {
             Debug.LogWarning("[HexGridManager] No shader found for background plane — skipping background.");
