@@ -140,7 +140,7 @@ public class GameManager : MonoBehaviour
 
         AssignMissions();
         HexGridManager.Instance.RefreshAllBorders();
-        AudioManager.Instance?.PlayTurnStart();
+        // no turn-start clip in new AudioManager
         BeginInitialPlacement();
     }
 
@@ -278,7 +278,7 @@ public class GameManager : MonoBehaviour
         _reinforceLeft = CalculateReinforcements(CurrentPlayerId);
         ClearSelection();
         HighlightOwnTiles(CurrentPlayerId);
-        AudioManager.Instance?.PlayTurnStart();
+        // no turn-start clip in new AudioManager
         UIManager.Instance?.UpdateUI();
         UIManager.Instance?.ShowPhaseTransition("REINFORCE", UIManager.GetClanColor(CurrentPlayerId));
         UIManager.Instance?.ShowMessage($"REINFORCE: Place {_reinforceLeft} troop(s) on your territories.");
@@ -433,10 +433,10 @@ public class GameManager : MonoBehaviour
         {
             defender.OwnerPlayerId = CurrentPlayerId;
             defender.TriggerConquestPulse();
-            AudioManager.Instance?.PlayConquer();
+            AudioManager.Instance?.PlayConquerSound();
             HexGridManager.Instance.RefreshAllBorders();
         }
-        else AudioManager.Instance?.PlayAttack();
+        else AudioManager.Instance?.PlayCombatSound();
 
         attacker.UpdateVisuals();
         defender.UpdateVisuals();

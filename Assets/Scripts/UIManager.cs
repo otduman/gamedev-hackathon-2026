@@ -614,6 +614,8 @@ public class UIManager : MonoBehaviour
         for (int i = 0; i < defCount; i++)
             defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2((dieStep * 0.5f) + dieStep * (defCount - 1 - i), diceRowY), defColor);
 
+        AudioManager.Instance?.PlayDiceSound();
+
         for (int c = 0; c < 10; c++)
         {
             foreach (var l in atkLabels) if (l) l.text = Random.Range(1, 7).ToString();
@@ -926,7 +928,7 @@ public class UIManager : MonoBehaviour
         rt.anchoredPosition = anchoredPos; rt.sizeDelta = sizeDelta;
         go.AddComponent<Image>().color = bgColor;
         Button btn = go.AddComponent<Button>();
-        btn.onClick.AddListener(() => onClick?.Invoke());
+        btn.onClick.AddListener(() => { AudioManager.Instance?.PlayButtonSound(); onClick?.Invoke(); });
         ColorBlock cb = btn.colors; cb.disabledColor = new Color(0.3f, 0.3f, 0.3f, 0.6f); btn.colors = cb;
 
         GameObject lGo = new GameObject("Label"); lGo.transform.SetParent(go.transform, false);
