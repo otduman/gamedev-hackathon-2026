@@ -517,6 +517,7 @@ public class HexGridManager : MonoBehaviour
                 if (lr.material.HasProperty("_EmissionColor"))
                     lr.material.SetColor("_EmissionColor", targetColor * 1.5f);
                 lr.startWidth = lr.endWidth = 0.05f * widthMult;
+                lr.transform.localPosition = new Vector3(0f, 0.02f, 0f); // lift slightly to avoid z-fighting with weak neighbors
             }
             else
             {
@@ -526,6 +527,7 @@ public class HexGridManager : MonoBehaviour
                 if (lr.material.HasProperty("_EmissionColor"))
                     lr.material.SetColor("_EmissionColor", Color.black);
                 lr.startWidth = lr.endWidth = boundary ? 0.055f : 0.010f;
+                lr.transform.localPosition = Vector3.zero;
             }
 
             if (lr.material != null)
