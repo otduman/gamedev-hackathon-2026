@@ -482,12 +482,27 @@ public class HexGridManager : MonoBehaviour
             ? Tile.RegionTints[tile.ContinentId]
             : BorderNeutral;
 
+        Color targetColor = regionCol;
+        float widthMult = 1f;
+        
+        if (tile.IsSelected)
+        {
+            targetColor = Color.yellow;
+            widthMult = 2.5f;
+        }
+        else if (tile.IsHighlighted)
+        {
+            targetColor = tile.HighlightColor;
+            widthMult = 2.0f;
+        }
+
         for (int i = 0; i < 6; i++)
         {
             LineRenderer lr = segs[i];
             if (lr == null) continue;
 
             lr.enabled = true;
+            lr.startWidth = lr.endWidth = 0.05f * widthMult;
 
             Vector2Int neighborCoord = tile.HexCoordinates + EdgeNeighborDirs[i];
             bool boundary = !Grid.TryGetValue(neighborCoord, out Tile neighbor)
@@ -495,10 +510,23 @@ public class HexGridManager : MonoBehaviour
                          || neighbor.Terrain == TerrainType.Water
                          || neighbor.Terrain == TerrainType.Mountain;
 
-            lr.startColor = lr.endColor = boundary
-                ? regionCol
-                : new Color(regionCol.r, regionCol.g, regionCol.b, 0.25f);
-            lr.startWidth = lr.endWidth = boundary ? 0.055f : 0.010f;
+            if (tile.IsSelected || tile.IsHighlighted)
+            {
+                // Always show full border brightly if highlighted
+                lr.startColor = lr.endColor = targetColor;
+                if (lr.material.HasProperty("_EmissionColor"))
+                    lr.material.SetColor("_EmissionColor", targetColor * 1.5f);
+                lr.startWidth = lr.endWidth = 0.05f * widthMult;
+            }
+            else
+            {
+                lr.startColor = lr.endColor = boundary
+                    ? regionCol
+                    : new Color(regionCol.r, regionCol.g, regionCol.b, 0.25f);
+                if (lr.material.HasProperty("_EmissionColor"))
+                    lr.material.SetColor("_EmissionColor", Color.black);
+                lr.startWidth = lr.endWidth = boundary ? 0.055f : 0.010f;
+            }
 
             if (lr.material != null)
             {

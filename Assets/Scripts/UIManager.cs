@@ -245,9 +245,9 @@ public class UIManager : MonoBehaviour
         bar.transform.SetParent(gameObject.transform, false);
         RectTransform brt = bar.AddComponent<RectTransform>();
         brt.anchorMin = new Vector2(0f, 1f); brt.anchorMax = new Vector2(1f, 1f);
-        brt.pivot = new Vector2(0.5f, 1f);
-        brt.anchoredPosition = Vector2.zero;
-        brt.sizeDelta = new Vector2(-rightPanelW, barH); // leave right panel gap
+        brt.pivot = new Vector2(0f, 1f);
+        brt.offsetMin = new Vector2(0f, -barH);
+        brt.offsetMax = new Vector2(-rightPanelW, 0f);
         Image barImg = bar.AddComponent<Image>();
         barImg.color = new Color(0.082f, 0.059f, 0.047f, 0.96f); // dark wood
         barImg.raycastTarget = false;
@@ -264,7 +264,7 @@ public class UIManager : MonoBehaviour
         lp.anchoredPosition = new Vector2(4f, 0f);
         lp.sizeDelta = new Vector2(leaderW, -8f);
         _leaderPanelBg = leaderPanel.AddComponent<Image>();
-        _leaderPanelBg.color = new Color(_clan0Color.r, _clan0Color.g, _clan0Color.b, 0.18f);
+        _leaderPanelBg.color = new Color(0f, 0f, 0f, 0f);
         _leaderPanelBg.raycastTarget = false;
         AddGoldBorder(leaderPanel);
 
@@ -350,8 +350,8 @@ public class UIManager : MonoBehaviour
         RectTransform ert = endBtn.AddComponent<RectTransform>();
         ert.anchorMin = ert.anchorMax = new Vector2(1f, 0.5f);
         ert.pivot = new Vector2(1f, 0.5f);
-        ert.anchoredPosition = new Vector2(-(rightPanelW + 8f), 0f);
-        ert.sizeDelta = new Vector2(endBtnW, endBtnW);
+        ert.anchoredPosition = new Vector2(-16f, 0f);
+        ert.sizeDelta = new Vector2(82f, 32f);
         _endTurnBg = endBtn.AddComponent<Image>();
         _endTurnBg.color = new Color(0.082f, 0.059f, 0.047f, 0.96f);
 
@@ -650,8 +650,7 @@ public class UIManager : MonoBehaviour
         Color fc    = GetClanColor(pid);
 
         // ── Leader panel ──────────────────────────────────────────────────
-        if (_leaderPanelBg != null)
-            _leaderPanelBg.color = new Color(fc.r, fc.g, fc.b, 0.20f);
+        // Background color is transparent so no need to update it here.
 
         if (_leaderNameText != null)
         {

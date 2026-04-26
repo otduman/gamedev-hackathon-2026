@@ -120,17 +120,22 @@ public class Tile : MonoBehaviour
     public void SetHasYurt(bool v) { HasYurt = v;                                  UpdateVisuals(); }
     public void SetHasForest(bool v) { HasForest = v; }
     public void SetTerritoryInfo(string name, int continentId) { TerritoryName = name; ContinentId = continentId; UpdateVisuals(); }
-    public void SetSelected(bool v)  { _isSelected = v;    UpdateVisuals(); }
-    public void SetHovered(bool v)   { _isHovered  = v;    UpdateVisuals(); }
+    public bool IsSelected => _isSelected;
+    public bool IsHighlighted => _isHighlighted;
+    public Color HighlightColor => _highlightColor;
+
+    public void SetSelected(bool v)  { _isSelected = v;    UpdateVisuals(); HexGridManager.Instance?.RefreshBorders(this); }
+    public void SetHovered(bool v)   { _isHovered  = v;    UpdateVisuals(); HexGridManager.Instance?.RefreshBorders(this); }
 
     public void SetHighlighted(bool highlighted, Color color)
     {
         _isHighlighted  = highlighted;
         _highlightColor = color;
         UpdateVisuals();
+        HexGridManager.Instance?.RefreshBorders(this);
     }
 
-    public void ClearHighlight() { _isHighlighted = false; UpdateVisuals(); }
+    public void ClearHighlight() { _isHighlighted = false; UpdateVisuals(); HexGridManager.Instance?.RefreshBorders(this); }
 
     public void TriggerConquestPulse()
     {
@@ -168,15 +173,14 @@ public class Tile : MonoBehaviour
         // communicated exclusively through border highlight colours.
         Color regionBase = _baseColor;
 
-        Color tint;
+        Color tint = regionBase;
+        
         if (_isSelected)
-            tint = regionBase * _selectedTint;
+            tint = Color.Lerp(regionBase, _selectedTint, 0.35f);
         else if (_isHighlighted)
-            tint = Color.Lerp(regionBase, _highlightColor, 0.82f);
+            tint = Color.Lerp(regionBase, _highlightColor, 0.25f);
         else if (_isHovered)
-            tint = Color.Lerp(regionBase, _hoverTint, 0.45f);
-        else
-            tint = regionBase;
+            tint = Color.Lerp(regionBase, _hoverTint, 0.25f);
 
         if (_pulseIntensity > 0f)
             tint = Color.Lerp(tint, Color.white, _pulseIntensity);
