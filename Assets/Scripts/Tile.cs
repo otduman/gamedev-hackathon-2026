@@ -9,16 +9,12 @@ public class Tile : MonoBehaviour
 {
     public Vector2Int HexCoordinates { get; private set; }
     public TerrainType Terrain       { get; private set; }
-    public int OwnerPlayerId         { get; set; } = -1;
-    public int CubeCount             { get; set; } = 0;
+    public int  OwnerPlayerId        { get; set; } = -1;
+    public int  CubeCount            { get; set; } = 0;
     public bool HasYurt              { get; private set; }
     public bool HasForest            { get; private set; }
-    public bool IsContested          { get; private set; }
-    public string CityName           { get; private set; }
-    public bool IsKeyRegion          { get; private set; }
-
-    // Cost to enter this tile during migration (forest = 2 movement points, otherwise 1)
-    public int MoveCost => HasForest ? 2 : 1;
+    public string TerritoryName      { get; private set; } = "";
+    public int  ContinentId          { get; private set; } = -1;
 
     [Header("Asset References")]
     [SerializeField] private GameObject  yurtPrefab;
@@ -26,62 +22,52 @@ public class Tile : MonoBehaviour
     [SerializeField] private Renderer    meshRenderer;
     [SerializeField] private TextMeshPro cubeCountText;
 
-    private GameObject            _activeYurtInstance;
-    private List<GameObject>      _activeWarriors      = new List<GameObject>();
-    private int                   _spawnedWarriorCount = -1;
-    private bool                  _spawnedHadYurt      = false;
-    private List<Renderer>        _decoRenderers       = new List<Renderer>();
+    private GameObject        _activeYurtInstance;
+    private List<GameObject>  _activeWarriors      = new List<GameObject>();
+    private int               _spawnedWarriorCount = -1;
+    private bool              _spawnedHadYurt      = false;
+    private List<Renderer>    _decoRenderers       = new List<Renderer>();
 
     private MaterialPropertyBlock _propBlock;
-    private bool                  _isSelected     = false;
-    private bool                  _isHighlighted  = false;
-    private bool                  _isHovered      = false;
-    private Color                 _highlightColor = Color.white;
-    private Color                 _baseColor      = Color.white;
-    private float                 _pulseIntensity = 0f;
+    private bool  _isSelected    = false;
+    private bool  _isHighlighted = false;
+    private bool  _isHovered     = false;
+    private Color _highlightColor = Color.white;
+    private Color _baseColor      = Color.white;
+    private float _pulseIntensity = 0f;
 
-    private static readonly Color _hoverTint = new Color(1.05f, 1.05f, 0.95f, 1f);
+    private static readonly Color _hoverTint    = new Color(0.95f, 0.95f, 0.80f, 1f);
+    private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
 
-    private static readonly Color _player0Tint  = new Color(0.25f, 0.55f, 1.00f, 1f);
-    private static readonly Color _player1Tint  = new Color(1.00f, 0.28f, 0.28f, 1f);
-    private static readonly Color _neutralTint  = new Color(0.55f, 0.55f, 0.55f, 1f);
-    private static readonly Color _selectedTint = new Color(1.00f, 0.90f, 0.10f, 1f);
+    // Indexed by OwnerPlayerId 0-3
+    private static readonly Color[] PlayerTints =
+    {
+        new Color(0.20f, 0.40f, 1.00f, 1f), // Argyn  — blue
+        new Color(1.00f, 0.28f, 0.28f, 1f), // Naiman — red
+        new Color(0.15f, 0.80f, 0.30f, 1f), // Kerey  — green
+        new Color(0.75f, 0.20f, 0.90f, 1f), // Kongrat— purple
+    };
 
-    private const float YurtScale        = 1.1f;
-    private const float WarriorScale     = 0.68f;
-    private const float WarriorYOffset   = -0.15f;
-    private const int   MaxShownWarriors = 5;
+    private const float YurtScale      = 1.1f;
+    private const float WarriorScale   = 0.38f;
+    private const float WarriorYOffset = -0.15f;
+    private const int   MaxWarriors    = 3;
+    private const float MountainYLift  = 1.10f;
 
-    // Mountain peaks rise above the tile origin — units placed at y=0 sink into the mesh.
-    private const float MountainYLift    = 1.10f;
-
-    private static readonly Vector3[][] Formations = new Vector3[][]
+    // Tight triangle formation for up to 3 units
+    private static readonly Vector3[][] Formations =
     {
         new[] { Vector3.zero },
-        new[] { new Vector3(-0.28f, 0f,  0.00f), new Vector3( 0.28f, 0f,  0.00f) },
-        new[] { new Vector3( 0.00f, 0f, -0.28f), new Vector3(-0.25f, 0f,  0.15f), new Vector3( 0.25f, 0f,  0.15f) },
-        new[] { new Vector3(-0.24f, 0f, -0.24f), new Vector3( 0.24f, 0f, -0.24f),
-                new Vector3(-0.24f, 0f,  0.24f), new Vector3( 0.24f, 0f,  0.24f) },
-        new[] { new Vector3( 0.00f, 0f,  0.00f), new Vector3( 0.00f, 0f, -0.32f),
-                new Vector3( 0.32f, 0f,  0.00f), new Vector3( 0.00f, 0f,  0.32f),
-                new Vector3(-0.32f, 0f,  0.00f) },
+        new[] { new Vector3(-0.20f, 0f,  0.00f), new Vector3( 0.20f, 0f,  0.00f) },
+        new[] { new Vector3( 0.00f, 0f, -0.22f), new Vector3(-0.18f, 0f,  0.12f), new Vector3( 0.18f, 0f,  0.12f) },
     };
 
-    // When a yurt occupies the tile, soldiers ring it at a fixed radius instead of clumping to one side.
-    private static readonly Vector3[][] YurtFormations = new Vector3[][]
-    {
-        new[] { new Vector3( 0.00f, 0f, -0.45f) },
-        new[] { new Vector3(-0.45f, 0f,  0.00f), new Vector3( 0.45f, 0f,  0.00f) },
-        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3(-0.40f, 0f,  0.23f), new Vector3( 0.40f, 0f,  0.23f) },
-        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3( 0.45f, 0f,  0.00f),
-                new Vector3( 0.00f, 0f,  0.45f), new Vector3(-0.45f, 0f,  0.00f) },
-        new[] { new Vector3( 0.00f, 0f, -0.45f), new Vector3( 0.43f, 0f, -0.14f),
-                new Vector3( 0.26f, 0f,  0.37f), new Vector3(-0.26f, 0f,  0.37f),
-                new Vector3(-0.43f, 0f, -0.14f) },
-    };
+    // -------------------------------------------------------------------------
+    // Initialisation
+    // -------------------------------------------------------------------------
 
     public void Initialize(Vector2Int coords, TerrainType terrain)
     {
@@ -97,19 +83,17 @@ public class Tile : MonoBehaviour
         if (meshRenderer != null) _baseColor = ReadBaseColor(meshRenderer);
     }
 
-    public void AddCubes(int amount)    { CubeCount += amount;                           UpdateVisuals(); }
-    public void RemoveCubes(int amount) { CubeCount = Mathf.Max(0, CubeCount - amount);  UpdateVisuals(); }
-    public void SetHasYurt(bool value)  { HasYurt = value;   UpdateVisuals(); }
-    public void SetHasForest(bool value) { HasForest = value; }
-    public void SetContested(bool contested) { IsContested = contested; UpdateVisuals(); }
-    public void SetCityInfo(string name, bool keyRegion) { CityName = name; IsKeyRegion = keyRegion; }
-    public void SetSelected(bool sel)   { _isSelected = sel; UpdateVisuals(); }
+    // -------------------------------------------------------------------------
+    // State setters
+    // -------------------------------------------------------------------------
 
-    public void SetHovered(bool hovered)
-    {
-        _isHovered = hovered;
-        UpdateVisuals();
-    }
+    public void AddCubes(int n)    { CubeCount += n;                              UpdateVisuals(); }
+    public void RemoveCubes(int n) { CubeCount = Mathf.Max(0, CubeCount - n);     UpdateVisuals(); }
+    public void SetHasYurt(bool v) { HasYurt = v;                                  UpdateVisuals(); }
+    public void SetHasForest(bool v) { HasForest = v; }
+    public void SetTerritoryInfo(string name, int continentId) { TerritoryName = name; ContinentId = continentId; }
+    public void SetSelected(bool v)  { _isSelected = v;    UpdateVisuals(); }
+    public void SetHovered(bool v)   { _isHovered  = v;    UpdateVisuals(); }
 
     public void SetHighlighted(bool highlighted, Color color)
     {
@@ -118,11 +102,7 @@ public class Tile : MonoBehaviour
         UpdateVisuals();
     }
 
-    public void ClearHighlight()
-    {
-        _isHighlighted = false;
-        UpdateVisuals();
-    }
+    public void ClearHighlight() { _isHighlighted = false; UpdateVisuals(); }
 
     public void TriggerConquestPulse()
     {
@@ -132,18 +112,15 @@ public class Tile : MonoBehaviour
 
     private IEnumerator PulseCoroutine()
     {
-        float duration = 0.55f;
-        float elapsed = 0f;
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            _pulseIntensity = Mathf.Sin(elapsed / duration * Mathf.PI) * 0.75f;
-            ApplyTint();
-            yield return null;
-        }
+        float t = 0f, dur = 0.55f;
+        while (t < dur) { t += Time.deltaTime; _pulseIntensity = Mathf.Sin(t / dur * Mathf.PI) * 0.75f; ApplyTint(); yield return null; }
         _pulseIntensity = 0f;
         ApplyTint();
     }
+
+    // -------------------------------------------------------------------------
+    // Visuals
+    // -------------------------------------------------------------------------
 
     public void UpdateVisuals()
     {
@@ -163,17 +140,14 @@ public class Tile : MonoBehaviour
         if (_isSelected)
             tint = _baseColor * _selectedTint;
         else if (_isHighlighted)
-            tint = Color.Lerp(_baseColor, _highlightColor, 0.60f);
+            tint = Color.Lerp(_baseColor, _highlightColor, 0.82f);
         else if (_isHovered)
-            tint = _baseColor * _hoverTint;
-        else if (OwnerPlayerId == 0)
-            tint = Color.Lerp(_baseColor, _player0Tint, IsContested ? 0.22f : 0.45f);
-        else if (OwnerPlayerId == 1)
-            tint = Color.Lerp(_baseColor, _player1Tint, IsContested ? 0.22f : 0.45f);
+            tint = Color.Lerp(_baseColor, _hoverTint, 0.45f);
+        else if (OwnerPlayerId >= 0 && OwnerPlayerId < PlayerTints.Length)
+            tint = Color.Lerp(_baseColor, PlayerTints[OwnerPlayerId], 0.45f);
         else
             tint = _baseColor;
 
-        // Conquest pulse: flash toward white
         if (_pulseIntensity > 0f)
             tint = Color.Lerp(tint, Color.white, _pulseIntensity);
 
@@ -184,10 +158,8 @@ public class Tile : MonoBehaviour
 
     private void UpdateWarriorVisuals()
     {
-        // Force a rebuild whenever the yurt appears/disappears so warriors re-offset away from it.
         if (_spawnedWarriorCount == CubeCount && _spawnedHadYurt == HasYurt)
         {
-            // Count + yurt state unchanged — re-tint existing warriors so conquest changes their colour.
             foreach (GameObject w in _activeWarriors)
                 if (w != null) ApplyOwnerTintToObject(w);
             return;
@@ -199,14 +171,10 @@ public class Tile : MonoBehaviour
             if (w != null) Destroy(w);
         _activeWarriors.Clear();
 
-        if (CubeCount <= 0 || Terrain == TerrainType.Water)
-        {
-            HideCountLabel();
-            return;
-        }
+        if (CubeCount <= 0 || Terrain == TerrainType.Water) { HideCountLabel(); return; }
 
-        int toShow = Mathf.Min(CubeCount, MaxShownWarriors);
-        Vector3[] positions = HasYurt ? YurtFormations[toShow - 1] : Formations[toShow - 1];
+        int toShow = Mathf.Min(CubeCount, MaxWarriors);
+        Vector3[] positions = Formations[toShow - 1];
 
         for (int i = 0; i < toShow; i++)
         {
@@ -215,89 +183,80 @@ public class Tile : MonoBehaviour
             _activeWarriors.Add(w);
         }
 
-        if (CubeCount > MaxShownWarriors)
-            ShowCountLabel(CubeCount);
-        else
-            HideCountLabel();
+        if (CubeCount > MaxWarriors) ShowCountLabel(CubeCount);
+        else                         HideCountLabel();
     }
 
     private GameObject SpawnWarrior(Vector3 localPos)
     {
-        float terrainLift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
+        float lift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
+        GameObject w;
 
-        GameObject warrior;
         if (warriorPrefab != null)
         {
-            warrior = Instantiate(warriorPrefab, transform);
-            warrior.transform.localPosition = localPos + new Vector3(0f, WarriorYOffset + terrainLift, 0f);
-            warrior.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-            warrior.transform.localScale    = Vector3.one * WarriorScale;
-
-            foreach (Collider c in warrior.GetComponentsInChildren<Collider>(true))
-                Destroy(c);
-
-            PlayIdleAnimation(warrior);
+            w = Instantiate(warriorPrefab, transform);
+            w.transform.localPosition = localPos + new Vector3(0f, WarriorYOffset + lift, 0f);
+            w.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            w.transform.localScale    = Vector3.one * WarriorScale;
+            foreach (Collider c in w.GetComponentsInChildren<Collider>(true)) Destroy(c);
+            PlayIdleAnimation(w);
         }
         else
         {
-            warrior = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            warrior.transform.SetParent(transform, false);
-            warrior.transform.localPosition = localPos + new Vector3(0f, 0.25f + terrainLift, 0f);
-            warrior.transform.localScale    = new Vector3(0.18f, 0.25f, 0.18f);
-            Destroy(warrior.GetComponent<Collider>());
+            w = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            w.transform.SetParent(transform, false);
+            w.transform.localPosition = localPos + new Vector3(0f, 0.22f + lift, 0f);
+            w.transform.localScale    = new Vector3(0.13f, 0.18f, 0.13f);
+            Destroy(w.GetComponent<Collider>());
         }
-        return warrior;
+        return w;
     }
 
-    private static void PlayIdleAnimation(GameObject warrior)
+    private static void PlayIdleAnimation(GameObject w)
     {
-        Animator anim = warrior.GetComponentInChildren<Animator>(true);
-        if (anim != null && anim.runtimeAnimatorController != null) { anim.Play(0); return; }
-        Animation legacyAnim = warrior.GetComponentInChildren<Animation>(true);
-        if (legacyAnim != null && legacyAnim.clip != null) legacyAnim.Play();
+        Animator anim = w.GetComponentInChildren<Animator>(true);
+        if (anim != null && anim.runtimeAnimatorController != null)
+        {
+            var clips = anim.runtimeAnimatorController.animationClips;
+            if (clips.Length > 0) anim.Play(clips[0].name);
+            return;
+        }
+        Animation leg = w.GetComponentInChildren<Animation>(true);
+        if (leg != null && leg.clip != null) leg.Play();
     }
 
     public void PlayAttackAnimation() => StartCoroutine(TemporaryAnim(1, 1.1f));
     public void PlayWalkAnimation()   => StartCoroutine(TemporaryAnim(2, 0.7f));
 
-    private System.Collections.IEnumerator TemporaryAnim(int stateIndex, float duration)
+    private IEnumerator TemporaryAnim(int idx, float dur)
     {
         foreach (GameObject w in _activeWarriors)
         {
             if (w == null) continue;
             Animator anim = w.GetComponentInChildren<Animator>(true);
-            if (anim != null && anim.runtimeAnimatorController != null &&
-                anim.runtimeAnimatorController.animationClips.Length > stateIndex)
-                anim.Play(stateIndex);
+            if (anim != null && anim.runtimeAnimatorController != null)
+            {
+                var clips = anim.runtimeAnimatorController.animationClips;
+                if (clips.Length > idx) anim.Play(clips[idx].name);
+            }
         }
-        yield return new WaitForSeconds(duration);
+        yield return new WaitForSeconds(dur);
         foreach (GameObject w in _activeWarriors)
             if (w != null) PlayIdleAnimation(w);
     }
 
-    private void ShowCountLabel(int count)
-    {
-        if (cubeCountText == null) return;
-        cubeCountText.text = count.ToString();
-        cubeCountText.gameObject.SetActive(true);
-    }
-
-    private void HideCountLabel()
-    {
-        if (cubeCountText != null)
-            cubeCountText.gameObject.SetActive(false);
-    }
+    private void ShowCountLabel(int n) { if (cubeCountText != null) { cubeCountText.text = n.ToString(); cubeCountText.gameObject.SetActive(true); } }
+    private void HideCountLabel()      { if (cubeCountText != null) cubeCountText.gameObject.SetActive(false); }
 
     private void UpdateYurtVisuals()
     {
         if (HasYurt && _activeYurtInstance == null)
         {
-            float terrainLift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
-
+            float lift = Terrain == TerrainType.Mountain ? MountainYLift : 0f;
             if (yurtPrefab != null)
             {
                 _activeYurtInstance = Instantiate(yurtPrefab, transform);
-                _activeYurtInstance.transform.localPosition = new Vector3(0f, terrainLift, 0f);
+                _activeYurtInstance.transform.localPosition = new Vector3(0f, lift, 0f);
                 _activeYurtInstance.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                 MakeSemiTransparent(_activeYurtInstance);
                 ApplyOwnerTintToObject(_activeYurtInstance);
@@ -307,8 +266,8 @@ public class Tile : MonoBehaviour
             {
                 _activeYurtInstance = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 _activeYurtInstance.transform.SetParent(transform, false);
-                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0.6f + terrainLift, 0f);
-                _activeYurtInstance.transform.localScale    = new Vector3(0.3f, 0.3f, 0.3f);
+                _activeYurtInstance.transform.localPosition = new Vector3(0f, 0.6f + lift, 0f);
+                _activeYurtInstance.transform.localScale    = Vector3.one * 0.3f;
                 Renderer r = _activeYurtInstance.GetComponent<Renderer>();
                 if (r != null) r.material.color = new Color(1f, 0.85f, 0.1f);
                 Collider c = _activeYurtInstance.GetComponent<Collider>();
@@ -320,52 +279,32 @@ public class Tile : MonoBehaviour
             Destroy(_activeYurtInstance);
             _activeYurtInstance = null;
         }
-
-        // Always re-apply the owner tint so a conquered yurt switches to the new clan's colour.
-        if (_activeYurtInstance != null)
-            ApplyOwnerTintToObject(_activeYurtInstance);
+        if (_activeYurtInstance != null) ApplyOwnerTintToObject(_activeYurtInstance);
     }
 
-    public void RegisterDecoRenderer(Renderer r)
-    {
-        if (r != null) _decoRenderers.Add(r);
-    }
+    public void RegisterDecoRenderer(Renderer r) { if (r != null) _decoRenderers.Add(r); }
 
     private void UpdateDecoOpacity()
     {
         if (_decoRenderers.Count == 0) return;
-
-        float alpha;
-        if (_isHovered)
-            alpha = 0.70f;
-        else if (CubeCount > 0 || HasYurt)
-            alpha = Terrain == TerrainType.Mountain ? 0.05f : 0.22f;
-        else
-            alpha = 0.52f;
+        float alpha = _isHovered ? 0.70f
+                    : (CubeCount > 0 || HasYurt) ? (Terrain == TerrainType.Mountain ? 0.05f : 0.22f)
+                    : 0.52f;
 
         foreach (Renderer r in _decoRenderers)
         {
             if (r == null || r.material == null) continue;
-            if (r.material.HasProperty(BaseColorId))
-            {
-                Color c = r.material.GetColor(BaseColorId); c.a = alpha;
-                r.material.SetColor(BaseColorId, c);
-            }
-            if (r.material.HasProperty(ColorId))
-            {
-                Color c = r.material.GetColor(ColorId); c.a = alpha;
-                r.material.SetColor(ColorId, c);
-            }
+            if (r.material.HasProperty(BaseColorId)) { Color c = r.material.GetColor(BaseColorId); c.a = alpha; r.material.SetColor(BaseColorId, c); }
+            if (r.material.HasProperty(ColorId))     { Color c = r.material.GetColor(ColorId);     c.a = alpha; r.material.SetColor(ColorId,     c); }
         }
     }
 
     private void ApplyOwnerTintToObject(GameObject go)
     {
         if (go == null) return;
-        // Neutral garrisons get a flat grey so they read as unaligned at a glance.
-        Color tint = OwnerPlayerId == 0 ? _player0Tint
-                   : OwnerPlayerId == 1 ? _player1Tint
-                   : _neutralTint;
+        Color tint = (OwnerPlayerId >= 0 && OwnerPlayerId < PlayerTints.Length)
+            ? PlayerTints[OwnerPlayerId]
+            : new Color(0.55f, 0.55f, 0.55f);
 
         MaterialPropertyBlock pb = new MaterialPropertyBlock();
         foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
@@ -382,40 +321,29 @@ public class Tile : MonoBehaviour
         foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
         {
             Material mat = new Material(r.sharedMaterial);
-            if (mat.HasProperty("_Surface"))    mat.SetFloat("_Surface", 1);
-            if (mat.HasProperty("_Blend"))      mat.SetFloat("_Blend", 0);
-            if (mat.HasProperty("_ZWrite"))     mat.SetFloat("_ZWrite", 0);
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1);
+            if (mat.HasProperty("_ZWrite"))  mat.SetFloat("_ZWrite",  0);
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.renderQueue = 3000;
-            if (mat.HasProperty("_BaseColor"))
-            { Color c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c); }
-            if (mat.HasProperty("_Color"))
-            { Color c = mat.GetColor("_Color"); c.a = alpha; mat.SetColor("_Color", c); }
+            if (mat.HasProperty("_BaseColor")) { Color c = mat.GetColor("_BaseColor"); c.a = alpha; mat.SetColor("_BaseColor", c); }
+            if (mat.HasProperty("_Color"))     { Color c = mat.GetColor("_Color");     c.a = alpha; mat.SetColor("_Color",     c); }
             r.material = mat;
         }
     }
 
-    private IEnumerator AutoScaleYurt(GameObject yurtGo)
+    private IEnumerator AutoScaleYurt(GameObject go)
     {
         yield return null;
-        if (yurtGo == null) yield break;
-
-        Transform searchRoot = yurtGo.transform.childCount > 0
-            ? yurtGo.transform.GetChild(0)
-            : yurtGo.transform;
-
-        bool keptOne = false;
-        for (int i = 0; i < searchRoot.childCount; i++)
+        if (go == null) yield break;
+        Transform root = go.transform.childCount > 0 ? go.transform.GetChild(0) : go.transform;
+        bool kept = false;
+        for (int i = 0; i < root.childCount; i++)
         {
-            Transform child = searchRoot.GetChild(i);
+            var child = root.GetChild(i);
             if (child.GetComponentInChildren<Renderer>(true) != null)
-            {
-                if (!keptOne) keptOne = true;
-                else child.gameObject.SetActive(false);
-            }
+            { if (!kept) kept = true; else child.gameObject.SetActive(false); }
         }
-
-        yurtGo.transform.localScale = Vector3.one * YurtScale;
+        go.transform.localScale = Vector3.one * YurtScale;
     }
 
     private static Color ReadBaseColor(Renderer r)

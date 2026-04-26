@@ -3,8 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-// UIManager builds the entire HUD programmatically at runtime.
-// Attach this script to a Canvas GameObject (HackathonAssetSetup does this automatically).
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
@@ -12,16 +10,15 @@ public class UIManager : MonoBehaviour
     // -------------------------------------------------------------------------
     // Colour palette
     // -------------------------------------------------------------------------
-    private static readonly Color _clan0Color   = new Color(0.20f, 0.40f, 1.00f);
-    private static readonly Color _clan1Color   = new Color(1.00f, 0.30f, 0.20f);
-    private static readonly Color _panelColor   = new Color(0.04f, 0.07f, 0.13f, 0.88f);
-    private static readonly Color _buttonColor  = new Color(0.15f, 0.55f, 0.15f);
-    private static readonly Color _white        = Color.white;
-    private static readonly Color _goldColor    = new Color(0.95f, 0.78f, 0.28f);
-    private static readonly Color _trackColor   = new Color(0.10f, 0.12f, 0.18f, 0.85f);
-    private static readonly Color _parchmentInk = new Color(0.97f, 0.92f, 0.78f);
-
-    private const int PrestigeGoal = 15;
+    private static readonly Color _clan0Color  = new Color(0.20f, 0.40f, 1.00f);
+    private static readonly Color _clan1Color  = new Color(1.00f, 0.28f, 0.28f);
+    private static readonly Color _clan2Color  = new Color(0.15f, 0.80f, 0.30f);
+    private static readonly Color _clan3Color  = new Color(0.75f, 0.20f, 0.90f);
+    private static readonly Color _panelColor  = new Color(0.04f, 0.07f, 0.13f, 0.88f);
+    private static readonly Color _buttonColor = new Color(0.15f, 0.55f, 0.15f);
+    private static readonly Color _white       = Color.white;
+    private static readonly Color _goldColor   = new Color(0.95f, 0.78f, 0.28f);
+    private static readonly Color _parchment   = new Color(0.97f, 0.92f, 0.78f);
 
     // -------------------------------------------------------------------------
     // UI element references (built in Awake)
@@ -29,33 +26,45 @@ public class UIManager : MonoBehaviour
     private TextMeshProUGUI _playerTurnText;
     private TextMeshProUGUI _phaseText;
     private TextMeshProUGUI _messageText;
-    private TextMeshProUGUI _clan0PrestigeText;
-    private TextMeshProUGUI _clan1PrestigeText;
-    private Image           _clan0PrestigeFill;
-    private Image           _clan1PrestigeFill;
 
+    // Mission panel
+    private GameObject      _missionPanel;
+    private TextMeshProUGUI _missionLabel;
+    private TextMeshProUGUI _missionProgress;
+
+    // Placement panel
+    private GameObject      _placementPanel;
+    private TextMeshProUGUI _placementInfoText;
+
+    // Combat result + dice animation
     private GameObject          _combatResultPanel;
     private TextMeshProUGUI     _combatResultText;
     private Coroutine           _combatHideCoroutine;
-
-    // Visual dice panel
     private GameObject          _diceCombatPanel;
-    private Coroutine           _diceHideCoroutine;
+    private Coroutine           _diceAnimCoroutine;
 
-    private Button               _endTurnButton;
+    // Phase banner
+    private GameObject          _phaseBannerPanel;
+    private TextMeshProUGUI     _phaseBannerText;
+    private Coroutine           _phaseBannerCoroutine;
 
+    // End-turn / end-attack button
+    private Button              _endTurnButton;
+    private TextMeshProUGUI     _endTurnLabel;
+
+    // Game-over overlay
     private GameObject          _gameOverPanel;
     private TextMeshProUGUI     _gameOverText;
 
+    // Tooltip
     private GameObject          _tooltipPanel;
-    private TextMeshProUGUI     _tooltipCityText;
+    private TextMeshProUGUI     _tooltipNameText;
     private TextMeshProUGUI     _tooltipTerrainText;
     private TextMeshProUGUI     _tooltipOwnerText;
     private TextMeshProUGUI     _tooltipWarriorsText;
-    private TextMeshProUGUI     _tooltipYurtText;
-    private TextMeshProUGUI     _tooltipKeyRegionText;
+    private TextMeshProUGUI     _tooltipRegionText;
 
-    // Combat setup panel (per-attack dice selection)
+    // Combat setup
     private GameObject          _combatSetupPanel;
     private Button[]            _atkDiceButtons;
     private Button[]            _defDiceButtons;
@@ -65,20 +74,17 @@ public class UIManager : MonoBehaviour
     private int                 _selectedDefDice;
     private int                 _atkDiceMax;
     private int                 _defDiceMax;
+    private TextMeshProUGUI     _atkHeader;
+    private TextMeshProUGUI     _defHeader;
+    private string              _cachedAtkClan = "Attacker";
+    private string              _cachedDefClan = "Defender";
 
-    // Migration count panel
+    // Troop count picker (post-conquest advance + fortify)
     private GameObject          _migrationCountPanel;
     private TextMeshProUGUI     _migrationCountTitle;
     private TextMeshProUGUI     _migrationCountText;
     private int                 _migrationCount;
     private int                 _migrationCountMax;
-
-    // Migration choice panel (Soldier vs Yurta)
-    private GameObject          _migrationChoicePanel;
-
-    // Combat setup header refs (re-coloured per attack based on initiator)
-    private TextMeshProUGUI     _atkHeader;
-    private TextMeshProUGUI     _defHeader;
 
     // -------------------------------------------------------------------------
     // Lifecycle
@@ -89,16 +95,14 @@ public class UIManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
-        // Unity sometimes serialises the Canvas RectTransform with scale (0,0,0).
-        // Force it to 1 here so the HUD is always visible regardless of scene state.
         RectTransform rt = GetComponent<RectTransform>();
         if (rt != null) rt.localScale = Vector3.one;
 
         EnsureCanvasComponents();
+        EnsureEventSystem();
         BuildHUD();
     }
 
-    // Make sure the GameObject this is on has the required Canvas plumbing.
     private void EnsureCanvasComponents()
     {
         Canvas canvas = GetComponent<Canvas>();
@@ -107,17 +111,36 @@ public class UIManager : MonoBehaviour
             canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         }
-
+        canvas.sortingOrder = 10; // stay above 3D geometry
         if (GetComponent<CanvasScaler>() == null)
         {
-            CanvasScaler scaler = gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280, 720);
-            scaler.matchWidthOrHeight = 0.5f;
+            CanvasScaler s = gameObject.AddComponent<CanvasScaler>();
+            s.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            s.referenceResolution = new Vector2(1280, 720);
+            s.matchWidthOrHeight  = 0.5f;
         }
-
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
+    }
+
+    // Unity UI requires an EventSystem to process button clicks.
+    // If none exists in the scene (common when everything is built in code),
+    // create one and attach the correct input module for the project's input backend.
+    private static void EnsureEventSystem()
+    {
+        if (FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() != null) return;
+
+        GameObject esGo = new GameObject("EventSystem");
+        DontDestroyOnLoad(esGo);
+        esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
+
+        // Prefer New Input System module; fall back to legacy Standalone if unavailable.
+        System.Type nisType = System.Type.GetType(
+            "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
+        if (nisType != null)
+            esGo.AddComponent(nisType);
+        else
+            esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
     }
 
     // -------------------------------------------------------------------------
@@ -127,7 +150,8 @@ public class UIManager : MonoBehaviour
     private void BuildHUD()
     {
         BuildTopBar();
-        BuildPrestigePanel();
+        BuildMissionPanel();
+        BuildPlacementPanel();
         BuildEndTurnButton();
         BuildCombatResultPanel();
         BuildDiceCombatPanel();
@@ -135,16 +159,18 @@ public class UIManager : MonoBehaviour
         BuildTooltipPanel();
         BuildCombatSetupPanel();
         BuildMigrationCountPanel();
-        BuildMigrationChoicePanel();
+        BuildPhaseBanner();
     }
 
-    // Public helper so other systems (and the dice panel) can colour UI by initiator.
-    public static Color GetClanColor(int playerId)
+    public static Color GetClanColor(int playerId) => playerId switch
     {
-        return playerId == 0 ? _clan0Color : _clan1Color;
-    }
+        0 => _clan0Color,
+        1 => _clan1Color,
+        2 => _clan2Color,
+        3 => _clan3Color,
+        _ => new Color(0.55f, 0.55f, 0.55f),
+    };
 
-    // Top bar — turn, phase, and instruction message
     private void BuildTopBar()
     {
         GameObject panel = CreatePanel("TopBar", gameObject,
@@ -154,8 +180,8 @@ public class UIManager : MonoBehaviour
 
         _playerTurnText = CreateTMPLabel("PlayerTurnText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 25f), new Vector2(600f, 40f),
-            "Player 1's Turn", 22, FontStyles.Bold);
+            new Vector2(0f, 25f), new Vector2(700f, 40f),
+            "Argyn's Turn", 22, FontStyles.Bold);
 
         _phaseText = CreateTMPLabel("PhaseText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -164,177 +190,109 @@ public class UIManager : MonoBehaviour
 
         _messageText = CreateTMPLabel("MessageText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -26f), new Vector2(700f, 24f),
+            new Vector2(0f, -26f), new Vector2(800f, 24f),
             "Initialising...", 14, FontStyles.Italic);
         _messageText.color = new Color(0.85f, 0.85f, 0.85f);
     }
 
-    // Bottom-right prestige panel with Civ-style gold-trimmed progress bars (15 = victory).
-    private void BuildPrestigePanel()
+    // Bottom-right: mission panel
+    private void BuildMissionPanel()
     {
-        GameObject panel = CreatePanel("PrestigePanel", gameObject,
+        _missionPanel = CreatePanel("MissionPanel", gameObject,
             new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
-            new Vector2(-150f, 90f), new Vector2(290f, 170f));
-        AddGoldTrim(panel, 2f);
+            new Vector2(-155f, 110f), new Vector2(300f, 200f));
+        AddGoldTrim(_missionPanel, 2f);
 
-        // Banner header — small gold strip at top of the panel
-        TextMeshProUGUI title = CreateTMPLabel("PrestigeTitle", panel,
+        TextMeshProUGUI title = CreateTMPLabel("MissionTitle", _missionPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -16f), new Vector2(260f, 24f),
-            "✦ Prestige to Victory ✦", 13, FontStyles.Bold);
+            new Vector2(0f, -16f), new Vector2(280f, 24f),
+            "SECRET MISSION", 13, FontStyles.Bold);
         title.color = _goldColor;
 
-        // Argyn row
-        BuildPrestigeBar(panel, 0, new Vector2(0f, 30f),
-            "Argyn", _clan0Color, out _clan0PrestigeText, out _clan0PrestigeFill);
+        _missionLabel = CreateTMPLabel("MissionLabel", _missionPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 30f), new Vector2(280f, 80f),
+            "", 13, FontStyles.Normal);
+        _missionLabel.alignment = TextAlignmentOptions.Center;
+        _missionLabel.color     = _parchment;
 
-        // Naiman row
-        BuildPrestigeBar(panel, 1, new Vector2(0f, -22f),
-            "Naiman", _clan1Color, out _clan1PrestigeText, out _clan1PrestigeFill);
-
-        TextMeshProUGUI footer = CreateTMPLabel("TargetText", panel,
+        _missionProgress = CreateTMPLabel("MissionProgress", _missionPanel,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(0f, 12f), new Vector2(260f, 18f),
-            $"First to {PrestigeGoal} prestige wins the steppe", 11, FontStyles.Italic);
-        footer.color = _parchmentInk;
+            new Vector2(0f, 20f), new Vector2(280f, 40f),
+            "", 12, FontStyles.Italic);
+        _missionProgress.color = new Color(0.75f, 0.95f, 0.75f);
     }
 
-    private void BuildPrestigeBar(GameObject parent, int playerId, Vector2 anchoredCenter,
-                                  string clanLabel, Color clanColor,
-                                  out TextMeshProUGUI valueText, out Image fillImage)
+    // Center-bottom: initial placement panel
+    private void BuildPlacementPanel()
     {
-        // Clan label on the left of the row
-        TextMeshProUGUI label = CreateTMPLabel($"Clan{playerId}Label", parent,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            anchoredCenter + new Vector2(-105f, 0f), new Vector2(70f, 22f),
-            clanLabel, 13, FontStyles.Bold);
-        label.color = clanColor;
-        label.alignment = TextAlignmentOptions.MidlineRight;
+        _placementPanel = CreatePanel("PlacementPanel", gameObject,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 130f), new Vector2(440f, 110f));
+        _placementPanel.GetComponent<Image>().color = new Color(0.04f, 0.08f, 0.04f, 0.90f);
+        AddGoldTrim(_placementPanel, 2f);
 
-        // Track (background)
-        GameObject track = new GameObject($"Clan{playerId}Track");
-        track.transform.SetParent(parent.transform, false);
-        RectTransform trackRt = track.AddComponent<RectTransform>();
-        trackRt.anchorMin = trackRt.anchorMax = trackRt.pivot = new Vector2(0.5f, 0.5f);
-        trackRt.anchoredPosition = anchoredCenter + new Vector2(15f, 0f);
-        trackRt.sizeDelta = new Vector2(160f, 18f);
-        Image trackImg = track.AddComponent<Image>();
-        trackImg.color = _trackColor;
+        _placementInfoText = CreateTMPLabel("PlacementInfo", _placementPanel,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -18f), new Vector2(420f, 24f),
+            "Place your starting troops", 14, FontStyles.Bold);
 
-        // Gold border around the track
-        AddGoldTrim(track, 1.5f);
+        CreateButton("RandomizeBtn", _placementPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(-110f, 28f), new Vector2(180f, 44f),
+            "Randomize for me", new Color(0.25f, 0.40f, 0.70f),
+            () => GameManager.Instance?.OnRandomizePlacement());
 
-        // Fill (clipped via Image.Type.Filled + horizontal fill)
-        GameObject fillGo = new GameObject($"Clan{playerId}Fill");
-        fillGo.transform.SetParent(track.transform, false);
-        RectTransform fillRt = fillGo.AddComponent<RectTransform>();
-        fillRt.anchorMin = Vector2.zero;
-        fillRt.anchorMax = Vector2.one;
-        fillRt.offsetMin = new Vector2(2f, 2f);
-        fillRt.offsetMax = new Vector2(-2f, -2f);
-        Image fill = fillGo.AddComponent<Image>();
-        fill.color = clanColor;
-        fill.type = Image.Type.Filled;
-        fill.fillMethod = Image.FillMethod.Horizontal;
-        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
-        fill.fillAmount = 0f;
-        fillImage = fill;
+        CreateButton("RandomizeAllBtn", _placementPanel,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(110f, 28f), new Vector2(180f, 44f),
+            "Auto-fill all", new Color(0.50f, 0.25f, 0.70f),
+            () => GameManager.Instance?.OnRandomizeAll());
 
-        // "X / 15" numeric label centered over the bar
-        TextMeshProUGUI value = CreateTMPLabel($"Clan{playerId}Value", track,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(160f, 18f),
-            $"0 / {PrestigeGoal}", 11, FontStyles.Bold);
-        value.color = _white;
-        valueText = value;
+        _placementPanel.SetActive(false);
     }
 
-    // Adds 4 thin gold strips around a panel's edges to give it a Civilization-style frame.
-    private void AddGoldTrim(GameObject parent, float thickness)
-    {
-        AddTrimStrip(parent, "TrimTop",    new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, thickness));
-        AddTrimStrip(parent, "TrimBottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, thickness));
-        AddTrimStrip(parent, "TrimLeft",   new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(thickness, 0f));
-        AddTrimStrip(parent, "TrimRight",  new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(thickness, 0f));
-    }
-
-    private void AddTrimStrip(GameObject parent, string name,
-                              Vector2 anchorMin, Vector2 anchorMax, Vector2 sizeDelta)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent.transform, false);
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = sizeDelta;
-        Image img = go.AddComponent<Image>();
-        img.color = _goldColor;
-        img.raycastTarget = false;
-    }
-
-    // End Turn button — bottom center
     private void BuildEndTurnButton()
     {
         GameObject btnGo = new GameObject("EndTurnButton");
         btnGo.transform.SetParent(gameObject.transform, false);
-
         RectTransform rt = btnGo.AddComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0f);
         rt.anchoredPosition = new Vector2(0f, 50f);
-        rt.sizeDelta = new Vector2(200f, 60f);
-
+        rt.sizeDelta = new Vector2(220f, 60f);
         Image img = btnGo.AddComponent<Image>();
         img.color = _buttonColor;
-
         Button btn = btnGo.AddComponent<Button>();
         _endTurnButton = btn;
         ColorBlock cb = btn.colors;
-        cb.highlightedColor  = new Color(0.25f, 0.70f, 0.25f);
-        cb.pressedColor      = new Color(0.10f, 0.40f, 0.10f);
-        cb.disabledColor     = new Color(0.35f, 0.35f, 0.35f);
+        cb.highlightedColor = new Color(0.25f, 0.70f, 0.25f);
+        cb.pressedColor     = new Color(0.10f, 0.40f, 0.10f);
+        cb.disabledColor    = new Color(0.35f, 0.35f, 0.35f);
         btn.colors = cb;
-
-        // Wire click to GameManager — safe because GameManager.Instance is set in Awake.
-        btn.onClick.AddListener(() =>
-        {
-            if (GameManager.Instance != null)
-                GameManager.Instance.OnEndTurnButtonClicked();
-        });
+        btn.onClick.AddListener(() => GameManager.Instance?.OnEndTurnButtonClicked());
 
         GameObject textGo = new GameObject("Label");
         textGo.transform.SetParent(btnGo.transform, false);
-        RectTransform textRt = textGo.AddComponent<RectTransform>();
-        textRt.anchorMin = Vector2.zero;
-        textRt.anchorMax = Vector2.one;
-        textRt.offsetMin = textRt.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI label = textGo.AddComponent<TextMeshProUGUI>();
-        label.text      = "End Turn";
-        label.fontSize  = 20;
-        label.fontStyle = FontStyles.Bold;
-        label.color     = _white;
-        label.alignment = TextAlignmentOptions.Center;
+        RectTransform trt = textGo.AddComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = trt.offsetMax = Vector2.zero;
+        _endTurnLabel = textGo.AddComponent<TextMeshProUGUI>();
+        _endTurnLabel.text = "End Turn"; _endTurnLabel.fontSize = 20;
+        _endTurnLabel.fontStyle = FontStyles.Bold; _endTurnLabel.color = _white;
+        _endTurnLabel.alignment = TextAlignmentOptions.Center;
     }
 
-    // Combat result overlay — center screen, hidden until needed
     private void BuildCombatResultPanel()
     {
         _combatResultPanel = CreatePanel("CombatResultPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(500f, 160f));
-
         _combatResultText = CreateTMPLabel("CombatText", _combatResultPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(460f, 140f),
-            "", 18, FontStyles.Bold);
+            Vector2.zero, new Vector2(460f, 140f), "", 18, FontStyles.Bold);
         _combatResultText.alignment = TextAlignmentOptions.Center;
-
         _combatResultPanel.SetActive(false);
     }
 
-    // Visual dice combat panel — 560×220, built entirely in code, hidden until combat resolves
     private void BuildDiceCombatPanel()
     {
         _diceCombatPanel = CreatePanel("DiceCombatPanel", gameObject,
@@ -344,411 +302,238 @@ public class UIManager : MonoBehaviour
         _diceCombatPanel.SetActive(false);
     }
 
-    // Game-over overlay — center screen, hidden until a player wins
     private void BuildGameOverPanel()
     {
         _gameOverPanel = CreatePanel("GameOverPanel", gameObject,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(600f, 300f));
-        (_gameOverPanel.GetComponent<Image>()).color = new Color(0f, 0f, 0f, 0.92f);
+            Vector2.zero, new Vector2(620f, 340f));
+        _gameOverPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.92f);
         AddGoldTrim(_gameOverPanel, 3f);
 
         _gameOverText = CreateTMPLabel("GameOverText", _gameOverPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 50f), new Vector2(560f, 100f),
-            "Game Over", 32, FontStyles.Bold);
+            new Vector2(0f, 60f), new Vector2(580f, 140f), "Game Over", 30, FontStyles.Bold);
         _gameOverText.alignment = TextAlignmentOptions.Center;
 
-        // Restart button inside the game-over panel
-        GameObject restartGo = new GameObject("RestartButton");
-        restartGo.transform.SetParent(_gameOverPanel.transform, false);
-
-        RectTransform rrt = restartGo.AddComponent<RectTransform>();
-        rrt.anchorMin = rrt.anchorMax = rrt.pivot = new Vector2(0.5f, 0.5f);
-        rrt.anchoredPosition = new Vector2(0f, -70f);
-        rrt.sizeDelta = new Vector2(200f, 55f);
-
-        Image rImg = restartGo.AddComponent<Image>();
-        rImg.color = new Color(0.60f, 0.10f, 0.10f);
-
-        Button rBtn = restartGo.AddComponent<Button>();
-        rBtn.onClick.AddListener(() => UnityEngine.SceneManagement.SceneManager.LoadScene(0));
-
-        GameObject rLabel = new GameObject("Label");
-        rLabel.transform.SetParent(restartGo.transform, false);
-        RectTransform rLabelRt = rLabel.AddComponent<RectTransform>();
-        rLabelRt.anchorMin = Vector2.zero;
-        rLabelRt.anchorMax = Vector2.one;
-        rLabelRt.offsetMin = rLabelRt.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI rText = rLabel.AddComponent<TextMeshProUGUI>();
-        rText.text      = "Play Again";
-        rText.fontSize  = 18;
-        rText.fontStyle = FontStyles.Bold;
-        rText.color     = _white;
-        rText.alignment = TextAlignmentOptions.Center;
+        CreateButton("RestartButton", _gameOverPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -90f), new Vector2(200f, 55f),
+            "Play Again", new Color(0.60f, 0.10f, 0.10f),
+            () => UnityEngine.SceneManagement.SceneManager.LoadScene(0));
 
         _gameOverPanel.SetActive(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Public API called by GameManager
-    // -------------------------------------------------------------------------
-
-    // Refreshes every HUD element from current GameManager state.
-    public void UpdateUI()
-    {
-        if (GameManager.Instance == null) return;
-
-        int pid = GameManager.Instance.CurrentPlayerId;
-
-        if (_playerTurnText != null)
-        {
-            _playerTurnText.text  = pid == 0 ? "Argyn's Turn" : "Naiman's Turn";
-            _playerTurnText.color = pid == 0 ? _clan0Color : _clan1Color;
-        }
-
-        if (_phaseText != null)
-        {
-            switch (GameManager.Instance.CurrentState)
-            {
-                case GameState.Reinforce:       _phaseText.text = "Phase: Reinforce"; break;
-                case GameState.Action:          _phaseText.text = "Phase: Action";    break;
-                case GameState.CombatSetup:     _phaseText.text = "Phase: Combat";    break;
-                case GameState.PostConquest:    _phaseText.text = "Phase: Advance";   break;
-                case GameState.MigrationCheck:  _phaseText.text = "Phase: Migration"; break;
-                case GameState.MigrationChoice: _phaseText.text = "Phase: Migration"; break;
-                case GameState.MigrationCount:  _phaseText.text = "Phase: Migration"; break;
-                case GameState.GameOver:        _phaseText.text = "Game Over";        break;
-            }
-        }
-
-        int p0 = GameManager.Instance.PlayerPrestige[0];
-        int p1 = GameManager.Instance.PlayerPrestige[1];
-
-        if (_clan0PrestigeText != null)
-            _clan0PrestigeText.text = $"{p0} / {PrestigeGoal}";
-        if (_clan1PrestigeText != null)
-            _clan1PrestigeText.text = $"{p1} / {PrestigeGoal}";
-
-        if (_clan0PrestigeFill != null)
-            _clan0PrestigeFill.fillAmount = Mathf.Clamp01((float)p0 / PrestigeGoal);
-        if (_clan1PrestigeFill != null)
-            _clan1PrestigeFill.fillAmount = Mathf.Clamp01((float)p1 / PrestigeGoal);
-
-        if (_endTurnButton != null)
-        {
-            // End Turn is only valid during Action or post-migration; modals own their own flow.
-            GameState s = GameManager.Instance.CurrentState;
-            _endTurnButton.interactable = s == GameState.Action || s == GameState.MigrationCheck;
-        }
-    }
-
-    // Updates the instruction text that guides the current player.
-    public void ShowMessage(string message)
-    {
-        if (_messageText != null)
-            _messageText.text = message;
-    }
-
-    // Plain-text fallback — keeps old call sites compiling.
-    public void ShowCombatResult(string message)
-    {
-        if (_combatResultPanel == null) return;
-
-        _combatResultText.text = message;
-        _combatResultPanel.SetActive(true);
-
-        if (_combatHideCoroutine != null)
-            StopCoroutine(_combatHideCoroutine);
-
-        _combatHideCoroutine = StartCoroutine(HideCombatPanelAfterDelay(2f));
-    }
-
-    // Visual dice overload — primary path when CombatResult is available.
-    public void ShowCombatResult(CombatResult result,
-                                 int attackerPlayerId, int defenderPlayerId,
-                                 string attackerClanName, string defenderClanName)
-    {
-        if (_diceCombatPanel == null || result == null) return;
-
-        // Stop any running hide coroutine and clear previous dynamic children
-        if (_diceHideCoroutine != null)
-            StopCoroutine(_diceHideCoroutine);
-
-        foreach (Transform child in _diceCombatPanel.transform)
-            Destroy(child.gameObject);
-
-        PopulateDicePanel(result, attackerPlayerId, defenderPlayerId, attackerClanName, defenderClanName);
-
-        _diceCombatPanel.SetActive(true);
-        _diceHideCoroutine = StartCoroutine(HideDicePanelAfterDelay(3f));
-    }
-
-    // -------------------------------------------------------------------------
-    // Dice panel population helpers
-    // -------------------------------------------------------------------------
-
-    private void PopulateDicePanel(CombatResult result,
-                                   int attackerPlayerId, int defenderPlayerId,
-                                   string attackerName, string defenderName)
-    {
-        // Panel is 560×220.  All anchoredPositions are relative to the panel centre.
-        //   Header label  y = +85
-        //   Column labels y = +58
-        //   Dice row      y = +15
-        //   Summary line  y = -50
-        //   Conquered     y = -83  (conditional)
-
-        // Initiator-aware colours: whoever is actually attacking gets their clan colour,
-        // not the static "Blue=Attacker / Red=Defender" baseline.
-        Color attackerColor = GetClanColor(attackerPlayerId);
-        Color defenderColor = GetClanColor(defenderPlayerId);
-
-        // Header
-        CreateTMPLabel("Header", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 85f), new Vector2(540f, 30f),
-            $"{attackerName} attacks {defenderName}!", 17, FontStyles.Bold);
-
-        // Column labels
-        TextMeshProUGUI attackLabel = CreateTMPLabel("AttackerLabel", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, 58f), new Vector2(200f, 24f),
-            attackerName, 13, FontStyles.Bold);
-        attackLabel.color = attackerColor;
-
-        TextMeshProUGUI defendLabel = CreateTMPLabel("DefenderLabel", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, 58f), new Vector2(200f, 24f),
-            defenderName, 13, FontStyles.Bold);
-        defendLabel.color = defenderColor;
-
-        // Dice geometry constants
-        const float dieSize  = 52f;
-        const float dieGap   = 8f;
-        const float dieStep  = dieSize + dieGap;
-        const float diceRowY = 5f;
-
-        // Attacker dice — highest die closest to the centre gap (so pair-0 sits next to its
-        // partner across the gap). Lower-ranked attacker dice extend leftward.
-        int attackCount = result.AttackerRolls.Length;
-        for (int i = 0; i < attackCount; i++)
-        {
-            float x = -(dieStep * 0.5f) - (dieStep * i);
-            SpawnDie($"AtkDie{i}", _diceCombatPanel, result.AttackerRolls[i],
-                new Vector2(x, diceRowY), attackerColor);
-        }
-
-        // Defender dice — LOWEST die closest to the centre gap. Reverse pairing: attacker's
-        // highest meets defender's lowest, so they sit visually adjacent across the gap.
-        int defendCount = result.DefenderRolls.Length;
-        for (int i = 0; i < defendCount; i++)
-        {
-            float x = (dieStep * 0.5f) + (dieStep * (defendCount - 1 - i));
-            SpawnDie($"DefDie{i}", _diceCombatPanel, result.DefenderRolls[i],
-                new Vector2(x, diceRowY), defenderColor);
-        }
-
-        // Outcome badge above each attacker die that actually participated.
-        // attackingDiceUsed excludes the discarded forest-bonus die.
-        int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : attackCount;
-        int pairs = Mathf.Min(atkUsed, defendCount);
-        for (int i = 0; i < pairs; i++)
-        {
-            int defIdx = pairs - 1 - i;
-            int atkVal = result.AttackerRolls[i];
-            int defVal = result.DefenderRolls[defIdx];
-
-            bool attackerWins = atkVal > defVal;
-            bool tied         = atkVal == defVal;
-
-            // Defender wins ties, so a tie shows as an attacker loss visually.
-            string symbol = tied ? "=" : attackerWins ? ">" : "<";
-            Color  symCol = attackerWins
-                ? new Color(0.20f, 0.85f, 0.20f)
-                : new Color(0.90f, 0.20f, 0.20f);
-
-            float atkX  = -(dieStep * 0.5f) - (dieStep * i);
-            float badgeY = diceRowY + dieSize * 0.5f + 14f;
-
-            TextMeshProUGUI ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(atkX, badgeY), new Vector2(46f, 22f),
-                $"{symbol} {defVal}", 14, FontStyles.Bold);
-            ind.color = symCol;
-        }
-
-        // Summary line
-        TextMeshProUGUI summary = CreateTMPLabel("Summary", _diceCombatPanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -50f), new Vector2(520f, 28f),
-            $"Attacker lost {result.AttackerLosses}  |  Defender lost {result.DefenderLosses}",
-            15, FontStyles.Normal);
-        summary.color = new Color(0.90f, 0.90f, 0.90f);
-
-        // Conquered banner
-        if (result.Conquered)
-        {
-            TextMeshProUGUI conquered = CreateTMPLabel("Conquered", _diceCombatPanel,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -83f), new Vector2(520f, 28f),
-                "CONQUERED!", 18, FontStyles.Bold);
-            conquered.color = _goldColor;
-        }
-    }
-
-    // Spawns a single die: a coloured background Image with a bold number label on top.
-    private void SpawnDie(string name, GameObject parent, int value, Vector2 position, Color clanColor)
-    {
-        const float dieSize = 52f;
-
-        GameObject dieGo = new GameObject(name);
-        dieGo.transform.SetParent(parent.transform, false);
-
-        RectTransform rt = dieGo.AddComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = position;
-        rt.sizeDelta = new Vector2(dieSize, dieSize);
-
-        // Slightly lighter clan colour at 0.9 alpha
-        Color bgColor = Color.Lerp(clanColor, Color.white, 0.35f);
-        bgColor.a = 0.9f;
-        Image img = dieGo.AddComponent<Image>();
-        img.color = bgColor;
-
-        // Number label
-        GameObject labelGo = new GameObject("Value");
-        labelGo.transform.SetParent(dieGo.transform, false);
-
-        RectTransform labelRt = labelGo.AddComponent<RectTransform>();
-        labelRt.anchorMin = Vector2.zero;
-        labelRt.anchorMax = Vector2.one;
-        labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI tmp = labelGo.AddComponent<TextMeshProUGUI>();
-        tmp.text      = value.ToString();
-        tmp.fontSize  = 24;
-        tmp.fontStyle = FontStyles.Bold;
-        tmp.color     = _white;
-        tmp.alignment = TextAlignmentOptions.Center;
-    }
-
-    private IEnumerator HideCombatPanelAfterDelay(float seconds)
-    {
-        yield return new WaitForSeconds(seconds);
-        if (_combatResultPanel != null)
-            _combatResultPanel.SetActive(false);
-    }
-
-    private IEnumerator HideDicePanelAfterDelay(float seconds)
-    {
-        yield return new WaitForSeconds(seconds);
-        if (_diceCombatPanel != null)
-            _diceCombatPanel.SetActive(false);
-    }
-
-    // Shows the game-over panel with a clan-specific victory message.
-    public void ShowGameOver(int winningPlayerId)
-    {
-        if (_gameOverPanel == null) return;
-
-        string clanName = winningPlayerId == 0 ? "Argyn" : "Naiman";
-        _gameOverText.text  = $"{clanName} is victorious!\nThe steppes bow to your Batyr.";
-        _gameOverText.color = winningPlayerId == 0 ? _clan0Color : _clan1Color;
-        _gameOverPanel.SetActive(true);
-    }
-
-    // Tooltip panel — bottom-left corner, hidden until a tile is hovered
     private void BuildTooltipPanel()
     {
         _tooltipPanel = CreatePanel("TooltipPanel", gameObject,
             new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
-            new Vector2(130f, 90f), new Vector2(260f, 168f));
+            new Vector2(130f, 90f), new Vector2(260f, 150f));
         AddGoldTrim(_tooltipPanel, 1.5f);
 
-        // City banner — gold serif feel for the named region.
-        _tooltipCityText = CreateTMPLabel("TooltipCity", _tooltipPanel,
+        _tooltipNameText = CreateTMPLabel("TooltipName", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -12f), new Vector2(240f, 22f),
-            "", 14, FontStyles.Bold);
-        _tooltipCityText.color = _goldColor;
-        _tooltipCityText.alignment = TextAlignmentOptions.Left;
+            new Vector2(0f, -12f), new Vector2(240f, 22f), "", 14, FontStyles.Bold);
+        _tooltipNameText.color = _goldColor;
+        _tooltipNameText.alignment = TextAlignmentOptions.Left;
 
-        _tooltipKeyRegionText = CreateTMPLabel("TooltipKeyRegion", _tooltipPanel,
+        _tooltipRegionText = CreateTMPLabel("TooltipRegion", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -32f), new Vector2(240f, 18f),
-            "★ Key Region (+2 Prestige)", 11, FontStyles.Italic);
-        _tooltipKeyRegionText.color = _parchmentInk;
-        _tooltipKeyRegionText.alignment = TextAlignmentOptions.Left;
+            new Vector2(0f, -33f), new Vector2(240f, 18f), "", 11, FontStyles.Italic);
+        _tooltipRegionText.color = _parchment;
+        _tooltipRegionText.alignment = TextAlignmentOptions.Left;
 
         _tooltipTerrainText = CreateTMPLabel("TooltipTerrain", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -54f), new Vector2(240f, 22f),
-            "", 13, FontStyles.Bold);
+            new Vector2(0f, -54f), new Vector2(240f, 22f), "", 13, FontStyles.Bold);
         _tooltipTerrainText.alignment = TextAlignmentOptions.Left;
 
         _tooltipOwnerText = CreateTMPLabel("TooltipOwner", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -76f), new Vector2(240f, 20f),
-            "", 12, FontStyles.Normal);
+            new Vector2(0f, -76f), new Vector2(240f, 20f), "", 12, FontStyles.Normal);
         _tooltipOwnerText.alignment = TextAlignmentOptions.Left;
 
         _tooltipWarriorsText = CreateTMPLabel("TooltipWarriors", _tooltipPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -96f), new Vector2(240f, 20f),
-            "", 12, FontStyles.Normal);
+            new Vector2(0f, -98f), new Vector2(240f, 20f), "", 12, FontStyles.Normal);
         _tooltipWarriorsText.alignment = TextAlignmentOptions.Left;
-
-        _tooltipYurtText = CreateTMPLabel("TooltipYurt", _tooltipPanel,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -118f), new Vector2(240f, 20f),
-            "+2 Prestige Bonus (yurt)", 12, FontStyles.Italic);
-        _tooltipYurtText.alignment = TextAlignmentOptions.Left;
-        _tooltipYurtText.color = new Color(1.00f, 0.85f, 0.20f);
 
         _tooltipPanel.SetActive(false);
     }
 
+    private void BuildPhaseBanner()
+    {
+        _phaseBannerPanel = CreatePanel("PhaseBanner", gameObject,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(480f, 80f));
+        _phaseBannerPanel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+
+        _phaseBannerText = CreateTMPLabel("BannerText", _phaseBannerPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(460f, 70f), "", 38, FontStyles.Bold);
+        _phaseBannerText.alignment = TextAlignmentOptions.Center;
+        _phaseBannerPanel.SetActive(false);
+    }
+
     // -------------------------------------------------------------------------
-    // Public tooltip API called by GameManager
+    // Public API
     // -------------------------------------------------------------------------
 
+    public void UpdateUI()
+    {
+        if (GameManager.Instance == null) return;
+
+        int   pid   = GameManager.Instance.CurrentPlayerId;
+        Color color = GetClanColor(pid);
+
+        if (_playerTurnText != null)
+        {
+            _playerTurnText.text  = $"{GameManager.Instance.GetClanName(pid)}'s Turn";
+            _playerTurnText.color = color;
+        }
+
+        if (_phaseText != null)
+        {
+            _phaseText.text = GameManager.Instance.CurrentState switch
+            {
+                GameState.InitialPlacement => "Phase: Placement",
+                GameState.Reinforce        => "Phase: Reinforce",
+                GameState.Attack           => "Phase: Attack",
+                GameState.CombatSetup      => "Phase: Combat",
+                GameState.PostConquest     => "Phase: Advance",
+                GameState.Fortify          => "Phase: Fortify",
+                GameState.GameOver         => "Game Over",
+                _                          => "",
+            };
+        }
+
+        // End-turn button
+        if (_endTurnButton != null)
+        {
+            GameState s = GameManager.Instance.CurrentState;
+            _endTurnButton.interactable = s == GameState.Attack || s == GameState.Fortify;
+            if (_endTurnLabel != null)
+                _endTurnLabel.text = s == GameState.Attack ? "End Attack" : "End Turn";
+        }
+
+        // Placement panel
+        if (_placementPanel != null)
+        {
+            bool placing = GameManager.Instance.CurrentState == GameState.InitialPlacement;
+            _placementPanel.SetActive(placing);
+            if (placing && _placementInfoText != null)
+                _placementInfoText.text = $"{GameManager.Instance.GetClanName(pid)}: place troops — {GameManager.Instance.GetExtraTroopsLeft(pid)} left";
+        }
+
+        // Mission panel — always show current player's mission
+        if (_missionPanel != null)
+        {
+            Mission m = GameManager.Instance.GetPlayerMission(pid);
+            _missionPanel.SetActive(m != null && GameManager.Instance.CurrentState != GameState.GameOver);
+            if (m != null && _missionLabel != null)
+            {
+                _missionLabel.text = m.Description;
+                if (_missionProgress != null)
+                    _missionProgress.text = GetMissionProgress(pid, m);
+            }
+        }
+    }
+
+    private string GetMissionProgress(int pid, Mission m)
+    {
+        if (HexGridManager.Instance == null) return "";
+        switch (m.Type)
+        {
+            case MissionType.ControlTerritories:
+                int cnt = 0;
+                foreach (Tile t in HexGridManager.Instance.Grid.Values)
+                    if (t.OwnerPlayerId == pid) cnt++;
+                return $"Progress: {cnt} / {m.TargetCount} territories";
+            case MissionType.DestroyPlayer:
+                bool alive = false;
+                foreach (Tile t in HexGridManager.Instance.Grid.Values)
+                    if (t.OwnerPlayerId == m.TargetPlayer) { alive = true; break; }
+                return alive ? "Target: still active" : "Target: eliminated!";
+            case MissionType.ControlTwoRegions:
+                if (m.TargetRegions == null) return "";
+                int controlled = 0;
+                foreach (int rid in m.TargetRegions)
+                    if (PlayerControlsRegion(pid, rid)) controlled++;
+                return $"Regions: {controlled} / {m.TargetRegions.Length} controlled";
+        }
+        return "";
+    }
+
+    private bool PlayerControlsRegion(int playerId, int regionId)
+    {
+        bool hasAny = false;
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+        {
+            if (t.ContinentId != regionId) continue;
+            if (t.Terrain == TerrainType.Water || t.Terrain == TerrainType.Mountain) continue;
+            hasAny = true;
+            if (t.OwnerPlayerId != playerId) return false;
+        }
+        return hasAny;
+    }
+
+    public void ShowMessage(string message)
+    {
+        if (_messageText != null) _messageText.text = message;
+    }
+
+    public void ShowPhaseTransition(string label, Color color)
+    {
+        if (_phaseBannerPanel == null) return;
+        if (_phaseBannerCoroutine != null) StopCoroutine(_phaseBannerCoroutine);
+        _phaseBannerCoroutine = StartCoroutine(PhaseBannerCoroutine(label, color));
+    }
+
+    private IEnumerator PhaseBannerCoroutine(string label, Color color)
+    {
+        _phaseBannerText.text  = label;
+        _phaseBannerText.color = color;
+        _phaseBannerPanel.SetActive(true);
+        float t = 0f;
+        while (t < 0.18f) { t += Time.deltaTime; _phaseBannerText.alpha = t / 0.18f; yield return null; }
+        _phaseBannerText.alpha = 1f;
+        yield return new WaitForSeconds(0.75f);
+        t = 0f;
+        while (t < 0.25f) { t += Time.deltaTime; _phaseBannerText.alpha = 1f - t / 0.25f; yield return null; }
+        _phaseBannerPanel.SetActive(false);
+    }
+
+    // Tooltip
     public void ShowTooltip(Tile tile)
     {
         if (_tooltipPanel == null || tile == null) return;
 
-        // City banner — only shown when the tile carries a name.
-        bool hasCity = !string.IsNullOrEmpty(tile.CityName);
-        _tooltipCityText.gameObject.SetActive(hasCity);
-        _tooltipKeyRegionText.gameObject.SetActive(hasCity && tile.IsKeyRegion);
-        if (hasCity)
-        {
-            _tooltipCityText.text  = tile.IsKeyRegion ? $"★ {tile.CityName}" : tile.CityName;
-            _tooltipCityText.color = tile.IsKeyRegion ? _goldColor : _parchmentInk;
-        }
+        bool hasName = !string.IsNullOrEmpty(tile.TerritoryName);
+        _tooltipNameText.text = hasName ? tile.TerritoryName : (tile.Terrain.ToString());
+        _tooltipNameText.color = hasName ? _goldColor : _parchment;
 
-        string terrainLabel = tile.Terrain switch
+        string regionName = tile.ContinentId >= 0 && tile.ContinentId < GameManager.RegionNames.Length
+            ? GameManager.RegionNames[tile.ContinentId] : "";
+        _tooltipRegionText.gameObject.SetActive(!string.IsNullOrEmpty(regionName));
+        _tooltipRegionText.text = regionName;
+
+        string terrain = tile.Terrain switch
         {
             TerrainType.Plain    => "Plain",
             TerrainType.Mountain => "Mountain",
             TerrainType.Water    => "Water",
             TerrainType.Pasture  => "Pasture",
-            _                    => tile.Terrain.ToString()
+            _                    => tile.Terrain.ToString(),
         };
-        if (tile.HasForest) terrainLabel += " (Forest · 2MP)";
-        _tooltipTerrainText.text  = terrainLabel;
+        if (tile.HasForest) terrain += " (Forest)";
+        _tooltipTerrainText.text  = terrain;
         _tooltipTerrainText.color = _white;
 
-        if (tile.OwnerPlayerId == 0)
+        int pid = tile.OwnerPlayerId;
+        if (pid >= 0 && pid < GameManager.PlayerCount)
         {
-            _tooltipOwnerText.text  = tile.IsContested ? "Owner: Argyn (Contested)" : "Owner: Argyn Clan";
-            _tooltipOwnerText.color = _clan0Color;
-        }
-        else if (tile.OwnerPlayerId == 1)
-        {
-            _tooltipOwnerText.text  = tile.IsContested ? "Owner: Naiman (Contested)" : "Owner: Naiman Clan";
-            _tooltipOwnerText.color = _clan1Color;
+            _tooltipOwnerText.text  = $"Owner: {GameManager.Instance?.GetClanName(pid) ?? $"Player {pid}"}";
+            _tooltipOwnerText.color = GetClanColor(pid);
         }
         else
         {
@@ -756,73 +541,158 @@ public class UIManager : MonoBehaviour
             _tooltipOwnerText.color = new Color(0.65f, 0.65f, 0.65f);
         }
 
-        bool showWarriors = tile.Terrain != TerrainType.Water &&
-                            !(tile.OwnerPlayerId == -1 && tile.CubeCount == 0);
-        _tooltipWarriorsText.text  = showWarriors ? $"Warriors: {tile.CubeCount}" : "Warriors: —";
+        bool showTroops = tile.Terrain != TerrainType.Water && tile.CubeCount > 0;
+        _tooltipWarriorsText.text  = showTroops ? $"Troops: {tile.CubeCount}" : "Troops: —";
         _tooltipWarriorsText.color = _white;
-
-        _tooltipYurtText.gameObject.SetActive(tile.HasYurt);
 
         _tooltipPanel.SetActive(true);
     }
 
     public void HideTooltip()
     {
-        if (_tooltipPanel != null)
-            _tooltipPanel.SetActive(false);
+        if (_tooltipPanel != null) _tooltipPanel.SetActive(false);
     }
 
-    // -------------------------------------------------------------------------
-    // Private factory helpers (avoid repeating RectTransform setup boilerplate)
-    // -------------------------------------------------------------------------
-
-    private GameObject CreatePanel(string name, GameObject parent,
-        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-        Vector2 anchoredPos, Vector2 sizeDelta)
+    // Combat result (plain text — legacy)
+    public void ShowCombatResult(string message)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent.transform, false);
-
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin        = anchorMin;
-        rt.anchorMax        = anchorMax;
-        rt.pivot            = pivot;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta        = sizeDelta;
-
-        Image img = go.AddComponent<Image>();
-        img.color = _panelColor;
-
-        return go;
+        if (_combatResultPanel == null) return;
+        _combatResultText.text = message;
+        _combatResultPanel.SetActive(true);
+        if (_combatHideCoroutine != null) StopCoroutine(_combatHideCoroutine);
+        _combatHideCoroutine = StartCoroutine(HidePanelAfter(_combatResultPanel, 2f));
     }
 
-    private TextMeshProUGUI CreateTMPLabel(string name, GameObject parent,
-        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-        Vector2 anchoredPos, Vector2 sizeDelta,
-        string text, float fontSize, FontStyles style)
+    // Combat result with dice animation
+    public void ShowCombatResult(CombatResult result,
+                                 int attackerPlayerId, int defenderPlayerId,
+                                 string attackerName, string defenderName)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent.transform, false);
+        if (_diceCombatPanel == null || result == null) return;
+        if (_diceAnimCoroutine != null) StopCoroutine(_diceAnimCoroutine);
+        foreach (Transform child in _diceCombatPanel.transform) Destroy(child.gameObject);
+        _diceCombatPanel.SetActive(true);
+        _diceAnimCoroutine = StartCoroutine(AnimateDicePanel(result, attackerPlayerId, defenderPlayerId, attackerName, defenderName));
+    }
 
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin        = anchorMin;
-        rt.anchorMax        = anchorMax;
-        rt.pivot            = pivot;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta        = sizeDelta;
+    private IEnumerator AnimateDicePanel(CombatResult result,
+                                         int atkPid, int defPid,
+                                         string atkName, string defName)
+    {
+        Color atkColor = GetClanColor(atkPid);
+        Color defColor = GetClanColor(defPid);
 
-        TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.text      = text;
-        tmp.fontSize  = fontSize;
-        tmp.fontStyle = style;
-        tmp.color     = _white;
-        tmp.alignment = TextAlignmentOptions.Center;
+        CreateTMPLabel("Header", _diceCombatPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 85f), new Vector2(540f, 30f),
+            $"{atkName} attacks {defName}!", 17, FontStyles.Bold);
 
+        TextMeshProUGUI aLabel = CreateTMPLabel("AtkLabel", _diceCombatPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-130f, 58f), new Vector2(200f, 24f), atkName, 13, FontStyles.Bold);
+        aLabel.color = atkColor;
+
+        TextMeshProUGUI dLabel = CreateTMPLabel("DefLabel", _diceCombatPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(130f, 58f), new Vector2(200f, 24f), defName, 13, FontStyles.Bold);
+        dLabel.color = defColor;
+
+        const float dieSize = 52f, dieStep = 60f, diceRowY = 5f;
+        int atkCount = result.AttackerRolls.Length, defCount = result.DefenderRolls.Length;
+
+        TextMeshProUGUI[] atkLabels = new TextMeshProUGUI[atkCount];
+        TextMeshProUGUI[] defLabels = new TextMeshProUGUI[defCount];
+
+        for (int i = 0; i < atkCount; i++)
+            atkLabels[i] = SpawnDie($"AtkDie{i}", _diceCombatPanel, -1, new Vector2(-(dieStep * 0.5f) - dieStep * i, diceRowY), atkColor);
+        for (int i = 0; i < defCount; i++)
+            defLabels[i] = SpawnDie($"DefDie{i}", _diceCombatPanel, -1, new Vector2((dieStep * 0.5f) + dieStep * (defCount - 1 - i), diceRowY), defColor);
+
+        for (int c = 0; c < 10; c++)
+        {
+            foreach (var l in atkLabels) if (l) l.text = Random.Range(1, 7).ToString();
+            foreach (var l in defLabels) if (l) l.text = Random.Range(1, 7).ToString();
+            yield return new WaitForSeconds(0.07f);
+        }
+
+        for (int i = 0; i < atkCount; i++) if (atkLabels[i]) atkLabels[i].text = result.AttackerRolls[i].ToString();
+        for (int i = 0; i < defCount; i++) if (defLabels[i]) defLabels[i].text = result.DefenderRolls[i].ToString();
+
+        yield return new WaitForSeconds(0.15f);
+
+        int atkUsed = result.AttackingDiceUsed > 0 ? result.AttackingDiceUsed : atkCount;
+        int pairs   = Mathf.Min(atkUsed, defCount);
+        for (int i = 0; i < pairs; i++)
+        {
+            int di = pairs - 1 - i;
+            int av = result.AttackerRolls[i], dv = result.DefenderRolls[di];
+            bool win = av > dv;
+            string sym = av == dv ? "=" : win ? ">" : "<";
+            Color  sc  = win ? new Color(0.2f, 0.85f, 0.2f) : new Color(0.9f, 0.2f, 0.2f);
+            TextMeshProUGUI ind = CreateTMPLabel($"Ind{i}", _diceCombatPanel,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-(dieStep * 0.5f) - dieStep * i, diceRowY + dieSize * 0.5f + 14f), new Vector2(46f, 22f),
+                $"{sym} {dv}", 14, FontStyles.Bold);
+            ind.color = sc;
+        }
+
+        TextMeshProUGUI summary = CreateTMPLabel("Summary", _diceCombatPanel,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -50f), new Vector2(520f, 28f),
+            $"Attacker lost {result.AttackerLosses}  |  Defender lost {result.DefenderLosses}", 15, FontStyles.Normal);
+        summary.color = new Color(0.9f, 0.9f, 0.9f);
+
+        if (result.Conquered)
+        {
+            TextMeshProUGUI conq = CreateTMPLabel("Conquered", _diceCombatPanel,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -83f), new Vector2(520f, 28f), "CONQUERED!", 18, FontStyles.Bold);
+            conq.color = _goldColor;
+        }
+
+        yield return new WaitForSeconds(3f);
+        if (_diceCombatPanel != null) _diceCombatPanel.SetActive(false);
+    }
+
+    private TextMeshProUGUI SpawnDie(string name, GameObject parent, int value, Vector2 position, Color clanColor)
+    {
+        const float dieSize = 52f;
+        GameObject dieGo = new GameObject(name);
+        dieGo.transform.SetParent(parent.transform, false);
+        RectTransform rt = dieGo.AddComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = position; rt.sizeDelta = new Vector2(dieSize, dieSize);
+        Color bg = Color.Lerp(clanColor, Color.white, 0.35f); bg.a = 0.9f;
+        dieGo.AddComponent<Image>().color = bg;
+
+        GameObject lGo = new GameObject("Value"); lGo.transform.SetParent(dieGo.transform, false);
+        RectTransform lrt = lGo.AddComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        TextMeshProUGUI tmp = lGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = value < 1 ? "?" : value.ToString(); tmp.fontSize = 24;
+        tmp.fontStyle = FontStyles.Bold; tmp.color = _white; tmp.alignment = TextAlignmentOptions.Center;
         return tmp;
     }
 
+    private IEnumerator HidePanelAfter(GameObject panel, float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
+        if (panel != null) panel.SetActive(false);
+    }
+
+    // Game over
+    public void ShowGameOver(int winningPlayerId, Mission mission)
+    {
+        if (_gameOverPanel == null) return;
+        string name = GameManager.Instance?.GetClanName(winningPlayerId) ?? $"Player {winningPlayerId}";
+        string missionDesc = mission != null ? $"\nMission: {mission.Description}" : "";
+        _gameOverText.text  = $"{name} is victorious!{missionDesc}\nThe steppes bow to your Batyr.";
+        _gameOverText.color = GetClanColor(winningPlayerId);
+        _gameOverPanel.SetActive(true);
+    }
+
     // -------------------------------------------------------------------------
-    // Combat setup panel — modal dice-count picker for both attacker and defender
+    // Combat setup panel
     // -------------------------------------------------------------------------
 
     private void BuildCombatSetupPanel()
@@ -835,13 +705,11 @@ public class UIManager : MonoBehaviour
 
         CreateTMPLabel("Title", _combatSetupPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -22f), new Vector2(540f, 32f),
-            "Combat Setup", 22, FontStyles.Bold);
+            new Vector2(0f, -22f), new Vector2(540f, 32f), "Combat Setup", 22, FontStyles.Bold);
 
         _atkHeader = CreateTMPLabel("AtkHeader", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, 75f), new Vector2(220f, 24f),
-            "Attacker dice", 14, FontStyles.Bold);
+            new Vector2(-130f, 75f), new Vector2(220f, 24f), "Attacker dice", 14, FontStyles.Bold);
 
         _atkDiceButtons = new Button[3];
         for (int i = 0; i < 3; i++)
@@ -853,15 +721,13 @@ public class UIManager : MonoBehaviour
                 n.ToString(), _buttonColor, () => SetAtkDice(n));
         }
 
-        _atkDiceLabel = CreateTMPLabel("AtkDiceLabel", _combatSetupPanel,
+        _atkDiceLabel = CreateTMPLabel("AtkLabel", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-130f, -10f), new Vector2(220f, 22f),
-            "Selected: 0", 13, FontStyles.Normal);
+            new Vector2(-130f, -10f), new Vector2(220f, 22f), "Selected: 0", 13, FontStyles.Normal);
 
         _defHeader = CreateTMPLabel("DefHeader", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, 75f), new Vector2(220f, 24f),
-            "Defender dice", 14, FontStyles.Bold);
+            new Vector2(130f, 75f), new Vector2(220f, 24f), "Defender dice", 14, FontStyles.Bold);
 
         _defDiceButtons = new Button[2];
         for (int i = 0; i < 2; i++)
@@ -873,55 +739,36 @@ public class UIManager : MonoBehaviour
                 n.ToString(), _buttonColor, () => SetDefDice(n));
         }
 
-        _defDiceLabel = CreateTMPLabel("DefDiceLabel", _combatSetupPanel,
+        _defDiceLabel = CreateTMPLabel("DefLabel", _combatSetupPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(130f, -10f), new Vector2(220f, 22f),
-            "Selected: 0", 13, FontStyles.Normal);
+            new Vector2(130f, -10f), new Vector2(220f, 22f), "Selected: 0", 13, FontStyles.Normal);
 
         CreateButton("ResolveBtn", _combatSetupPanel,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(-80f, 30f), new Vector2(140f, 44f),
-            "Resolve", new Color(0.55f, 0.10f, 0.10f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnCombatSetupConfirm(_selectedAtkDice, _selectedDefDice);
-            });
+            "Resolve", new Color(0.55f, 0.10f, 0.10f),
+            () => GameManager.Instance?.OnCombatSetupConfirm(_selectedAtkDice, _selectedDefDice));
 
         CreateButton("CancelBtn", _combatSetupPanel,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(80f, 30f), new Vector2(140f, 44f),
-            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnCombatSetupCancel();
-            });
+            "Cancel", new Color(0.30f, 0.30f, 0.30f),
+            () => GameManager.Instance?.OnCombatSetupCancel());
 
         _combatSetupPanel.SetActive(false);
     }
 
-    public void ShowCombatSetup(int attackerPlayerId, int defenderPlayerId,
-                                int maxAtk, int maxDef,
-                                string atkClan, string defClan)
+    public void ShowCombatSetup(int atkPid, int defPid, int maxAtk, int maxDef, string atkClan, string defClan)
     {
         if (_combatSetupPanel == null) return;
-        _atkDiceMax = maxAtk;
-        _defDiceMax = maxDef;
-        _selectedAtkDice = maxAtk;
-        _selectedDefDice = maxDef;
-
-        for (int i = 0; i < _atkDiceButtons.Length; i++)
-            _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
-        for (int i = 0; i < _defDiceButtons.Length; i++)
-            _defDiceButtons[i].interactable = (i + 1) <= maxDef;
-
-        // Headers re-coloured each time so the initiator (whoever is attacking) appears
-        // in their own clan colour, not always blue/red.
-        if (_atkHeader != null) _atkHeader.color = GetClanColor(attackerPlayerId);
-        if (_defHeader != null) _defHeader.color = GetClanColor(defenderPlayerId);
-
-        UpdateAtkDiceLabel(atkClan);
-        UpdateDefDiceLabel(defClan);
-
+        _atkDiceMax = maxAtk; _defDiceMax = maxDef;
+        _selectedAtkDice = maxAtk; _selectedDefDice = maxDef;
+        for (int i = 0; i < _atkDiceButtons.Length; i++) _atkDiceButtons[i].interactable = (i + 1) <= maxAtk;
+        for (int i = 0; i < _defDiceButtons.Length; i++) _defDiceButtons[i].interactable = (i + 1) <= maxDef;
+        if (_atkHeader) _atkHeader.color = GetClanColor(atkPid);
+        if (_defHeader) _defHeader.color = GetClanColor(defPid);
+        _cachedAtkClan = atkClan; _cachedDefClan = defClan;
+        RefreshCombatLabels();
         _combatSetupPanel.SetActive(true);
     }
 
@@ -930,28 +777,17 @@ public class UIManager : MonoBehaviour
         if (_combatSetupPanel != null) _combatSetupPanel.SetActive(false);
     }
 
-    private void SetAtkDice(int n) { _selectedAtkDice = n; UpdateAtkDiceLabel(null); }
-    private void SetDefDice(int n) { _selectedDefDice = n; UpdateDefDiceLabel(null); }
+    private void SetAtkDice(int n) { _selectedAtkDice = n; RefreshCombatLabels(); }
+    private void SetDefDice(int n) { _selectedDefDice = n; RefreshCombatLabels(); }
 
-    private string _cachedAtkClan = "Attacker";
-    private string _cachedDefClan = "Defender";
-
-    private void UpdateAtkDiceLabel(string atkClan)
+    private void RefreshCombatLabels()
     {
-        if (atkClan != null) _cachedAtkClan = atkClan;
-        if (_atkDiceLabel != null)
-            _atkDiceLabel.text = $"{_cachedAtkClan}: {_selectedAtkDice} / {_atkDiceMax}";
-    }
-
-    private void UpdateDefDiceLabel(string defClan)
-    {
-        if (defClan != null) _cachedDefClan = defClan;
-        if (_defDiceLabel != null)
-            _defDiceLabel.text = $"{_cachedDefClan}: {_selectedDefDice} / {_defDiceMax}";
+        if (_atkDiceLabel) _atkDiceLabel.text = $"{_cachedAtkClan}: {_selectedAtkDice} / {_atkDiceMax}";
+        if (_defDiceLabel) _defDiceLabel.text = $"{_cachedDefClan}: {_selectedDefDice} / {_defDiceMax}";
     }
 
     // -------------------------------------------------------------------------
-    // Migration count panel — pick how many warriors move
+    // Troop count picker
     // -------------------------------------------------------------------------
 
     private void BuildMigrationCountPanel()
@@ -964,52 +800,44 @@ public class UIManager : MonoBehaviour
 
         _migrationCountTitle = CreateTMPLabel("Title", _migrationCountPanel,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -22f), new Vector2(400f, 28f),
-            "Migrate warriors", 18, FontStyles.Bold);
+            new Vector2(0f, -22f), new Vector2(400f, 28f), "Move troops", 18, FontStyles.Bold);
 
         CreateButton("Minus", _migrationCountPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(-110f, 15f), new Vector2(54f, 54f),
-            "-", _buttonColor, () => AdjustMigrationCount(-1));
+            "-", _buttonColor, () => AdjustCount(-1));
 
         _migrationCountText = CreateTMPLabel("Count", _migrationCountPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 15f), new Vector2(140f, 54f),
-            "1", 26, FontStyles.Bold);
+            new Vector2(0f, 15f), new Vector2(140f, 54f), "1", 26, FontStyles.Bold);
 
         CreateButton("Plus", _migrationCountPanel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(110f, 15f), new Vector2(54f, 54f),
-            "+", _buttonColor, () => AdjustMigrationCount(1));
+            "+", _buttonColor, () => AdjustCount(1));
 
-        CreateButton("ConfirmMig", _migrationCountPanel,
+        CreateButton("Confirm", _migrationCountPanel,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(-70f, 30f), new Vector2(120f, 40f),
-            "Confirm", new Color(0.15f, 0.55f, 0.15f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnMigrationCountConfirm(_migrationCount);
-            });
+            "Confirm", new Color(0.15f, 0.55f, 0.15f),
+            () => GameManager.Instance?.OnMigrationCountConfirm(_migrationCount));
 
-        CreateButton("CancelMig", _migrationCountPanel,
+        CreateButton("Cancel", _migrationCountPanel,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(70f, 30f), new Vector2(120f, 40f),
-            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnMigrationCountCancel();
-            });
+            "Cancel", new Color(0.30f, 0.30f, 0.30f),
+            () => GameManager.Instance?.OnMigrationCountCancel());
 
         _migrationCountPanel.SetActive(false);
     }
 
-    public void ShowMigrationCount(int max, int defaultCount, string title = "Migrate warriors")
+    public void ShowMigrationCount(int max, int defaultCount, string title = "Move troops")
     {
         if (_migrationCountPanel == null) return;
         _migrationCountMax = Mathf.Max(1, max);
         _migrationCount    = Mathf.Clamp(defaultCount, 1, _migrationCountMax);
         if (_migrationCountTitle != null) _migrationCountTitle.text = title;
-        UpdateMigrationCountText();
+        UpdateCountText();
         _migrationCountPanel.SetActive(true);
     }
 
@@ -1018,116 +846,86 @@ public class UIManager : MonoBehaviour
         if (_migrationCountPanel != null) _migrationCountPanel.SetActive(false);
     }
 
-    private void AdjustMigrationCount(int delta)
+    private void AdjustCount(int delta)
     {
         _migrationCount = Mathf.Clamp(_migrationCount + delta, 1, _migrationCountMax);
-        UpdateMigrationCountText();
+        UpdateCountText();
     }
 
-    private void UpdateMigrationCountText()
+    private void UpdateCountText()
     {
         if (_migrationCountText != null)
             _migrationCountText.text = $"{_migrationCount} / {_migrationCountMax}";
     }
 
     // -------------------------------------------------------------------------
-    // Migration choice panel — pick whether to move soldiers or relocate the yurt
+    // Factory helpers
     // -------------------------------------------------------------------------
 
-    private void BuildMigrationChoicePanel()
+    private void AddGoldTrim(GameObject parent, float thickness)
     {
-        _migrationChoicePanel = CreatePanel("MigrationChoicePanel", gameObject,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(440f, 200f));
-        _migrationChoicePanel.GetComponent<Image>().color = new Color(0.05f, 0.10f, 0.05f, 0.92f);
-
-        CreateTMPLabel("Title", _migrationChoicePanel,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -22f), new Vector2(420f, 28f),
-            "Move soldiers or relocate yurt?", 17, FontStyles.Bold);
-
-        CreateButton("MoveSoldiers", _migrationChoicePanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-100f, 0f), new Vector2(170f, 60f),
-            "Move Soldiers", new Color(0.15f, 0.55f, 0.15f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnMigrationChooseSoldiers();
-            });
-
-        CreateButton("MoveYurta", _migrationChoicePanel,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(100f, 0f), new Vector2(170f, 60f),
-            "Move Yurta", new Color(0.85f, 0.65f, 0.10f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnMigrationChooseYurta();
-            });
-
-        CreateButton("CancelChoice", _migrationChoicePanel,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(0f, 25f), new Vector2(140f, 38f),
-            "Cancel", new Color(0.30f, 0.30f, 0.30f), () =>
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.OnMigrationChoiceCancel();
-            });
-
-        _migrationChoicePanel.SetActive(false);
+        AddTrimStrip(parent, "TrimTop",    new Vector2(0f,1f), new Vector2(1f,1f), new Vector2(0f, thickness));
+        AddTrimStrip(parent, "TrimBottom", new Vector2(0f,0f), new Vector2(1f,0f), new Vector2(0f, thickness));
+        AddTrimStrip(parent, "TrimLeft",   new Vector2(0f,0f), new Vector2(0f,1f), new Vector2(thickness, 0f));
+        AddTrimStrip(parent, "TrimRight",  new Vector2(1f,0f), new Vector2(1f,1f), new Vector2(thickness, 0f));
     }
 
-    public void ShowMigrationChoice()
+    private void AddTrimStrip(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 sizeDelta)
     {
-        if (_migrationChoicePanel != null) _migrationChoicePanel.SetActive(true);
+        GameObject go = new GameObject(name); go.transform.SetParent(parent.transform, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero; rt.sizeDelta = sizeDelta;
+        Image img = go.AddComponent<Image>(); img.color = _goldColor; img.raycastTarget = false;
     }
 
-    public void HideMigrationChoice()
+    private GameObject CreatePanel(string name, GameObject parent,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 sizeDelta)
     {
-        if (_migrationChoicePanel != null) _migrationChoicePanel.SetActive(false);
+        GameObject go = new GameObject(name); go.transform.SetParent(parent.transform, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos; rt.sizeDelta = sizeDelta;
+        go.AddComponent<Image>().color = _panelColor;
+        return go;
     }
 
-    // -------------------------------------------------------------------------
-    // Button factory — used by the dice/migration panels
-    // -------------------------------------------------------------------------
+    private TextMeshProUGUI CreateTMPLabel(string name, GameObject parent,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 sizeDelta,
+        string text, float fontSize, FontStyles style)
+    {
+        GameObject go = new GameObject(name); go.transform.SetParent(parent.transform, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos; rt.sizeDelta = sizeDelta;
+        TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = text; tmp.fontSize = fontSize; tmp.fontStyle = style;
+        tmp.color = _white; tmp.alignment = TextAlignmentOptions.Center;
+        return tmp;
+    }
 
     private Button CreateButton(string name, GameObject parent,
         Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
         Vector2 anchoredPos, Vector2 sizeDelta,
         string label, Color bgColor, System.Action onClick)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent.transform, false);
-
+        GameObject go = new GameObject(name); go.transform.SetParent(parent.transform, false);
         RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin        = anchorMin;
-        rt.anchorMax        = anchorMax;
-        rt.pivot            = pivot;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta        = sizeDelta;
-
-        Image img = go.AddComponent<Image>();
-        img.color = bgColor;
-
+        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos; rt.sizeDelta = sizeDelta;
+        go.AddComponent<Image>().color = bgColor;
         Button btn = go.AddComponent<Button>();
         btn.onClick.AddListener(() => onClick?.Invoke());
-        ColorBlock cb = btn.colors;
-        cb.disabledColor = new Color(0.30f, 0.30f, 0.30f, 0.6f);
-        btn.colors = cb;
+        ColorBlock cb = btn.colors; cb.disabledColor = new Color(0.3f, 0.3f, 0.3f, 0.6f); btn.colors = cb;
 
-        GameObject labelGo = new GameObject("Label");
-        labelGo.transform.SetParent(go.transform, false);
-        RectTransform labelRt = labelGo.AddComponent<RectTransform>();
-        labelRt.anchorMin = Vector2.zero;
-        labelRt.anchorMax = Vector2.one;
-        labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI tmp = labelGo.AddComponent<TextMeshProUGUI>();
-        tmp.text      = label;
-        tmp.fontSize  = 18;
-        tmp.fontStyle = FontStyles.Bold;
-        tmp.color     = _white;
-        tmp.alignment = TextAlignmentOptions.Center;
-
+        GameObject lGo = new GameObject("Label"); lGo.transform.SetParent(go.transform, false);
+        RectTransform lrt = lGo.AddComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        TextMeshProUGUI tmp = lGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = label; tmp.fontSize = 18; tmp.fontStyle = FontStyles.Bold;
+        tmp.color = _white; tmp.alignment = TextAlignmentOptions.Center;
         return btn;
     }
 }

@@ -1,50 +1,64 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public enum GameState { Reinforce, Action, CombatSetup, PostConquest, MigrationCheck, MigrationChoice, MigrationCount, GameOver }
+public enum GameState { InitialPlacement, Reinforce, Attack, CombatSetup, PostConquest, Fortify, GameOver }
+
+public enum MissionType { ControlTerritories, DestroyPlayer, ControlTwoRegions }
+
+public class Mission
+{
+    public MissionType Type;
+    public int    TargetCount;
+    public int    TargetPlayer;
+    public int[]  TargetRegions;
+    public string Description;
+}
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
-    public GameState CurrentState    { get; private set; } = GameState.Reinforce;
+    public const int PlayerCount = 4;
+
+    public GameState CurrentState    { get; private set; } = GameState.InitialPlacement;
     public int       CurrentPlayerId { get; private set; } = 0;
-    public int[]     PlayerPrestige  = new int[2];
 
-    private static readonly string[] ClanNames = { "Argyn", "Naiman" };
+    private static readonly string[] ClanNames = { "Argyn", "Naiman", "Kerey", "Kongrat" };
 
-    private static readonly Color _attackHighlight    = new Color(1.00f, 0.20f, 0.20f, 1f);
-    private static readonly Color _migrationHighlight = new Color(0.20f, 0.90f, 0.40f, 1f);
-    private static readonly Color _yurtMoveHighlight  = new Color(1.00f, 0.80f, 0.00f, 1f);
-    private static readonly Color _neutralHighlight   = new Color(0.90f, 0.85f, 0.10f, 1f);
+    public static readonly string[] RegionNames =
+        { "Uly Zhuz", "Zhetysu", "Orta Zhuz", "Kishi Zhuz", "Dala", "Syr Darya" };
 
-    private Tile _selectedTile           = null;
-    private Tile _hoveredTile            = null;
-    private int  _moveCount              = 0;
-    private int  _reinforceLeft          = 0;
-    private bool _migrationUsed          = false;
+    private static readonly int[] RegionBonuses = { 5, 5, 4, 4, 3, 3 };
 
-    // Pending state for the modal combat-setup panel
-    private Tile _pendingAttacker        = null;
-    private Tile _pendingDefender        = null;
+    private static readonly Color _attackHighlight   = new Color(1.00f, 0.55f, 0.00f, 1f);
+    private static readonly Color _fortifyHighlight  = new Color(0.25f, 1.00f, 0.50f, 1f);
+    private static readonly Color _reinforceHighlight = new Color(1.00f, 0.85f, 0.10f, 1f);
 
-    // Pending destination while the migration count panel is open
-    private Tile _pendingMigrationDest   = null;
+    // Missions
+    private Mission[] _playerMissions = new Mission[PlayerCount];
 
-    // Pending tiles for the post-conquest advance step
-    private Tile _postConquestSource     = null;
-    private Tile _postConquestDest       = null;
+    // Initial placement
+    private const int ExtraTroopsPerPlayer = 15;
+    private int[] _extraTroopsLeft = new int[PlayerCount];
+    private int   _placementTurn   = 0;
 
-    // True when the active migration is moving the yurt; false for warrior migration.
-    // Set in HandleMigrationClick / OnMigrationChoose* and consumed in the destination handler.
-    private bool _yurtMigrationMode      = false;
+    // Turn state
+    private Tile _selectedTile  = null;
+    private Tile _hoveredTile   = null;
+    private int  _reinforceLeft = 0;
+    private bool _fortifyUsed   = false;
+    private Tile _fortifySource = null;
 
-    // Reachable tiles from the current migration selection (BFS result)
-    private Dictionary<Tile, int> _reachableTiles = new Dictionary<Tile, int>();
+    // Combat pending
+    private Tile _pendingAttacker    = null;
+    private Tile _pendingDefender    = null;
+    private Tile _postConquestSource = null;
+    private Tile _postConquestDest   = null;
 
     private List<Tile> _highlightedTiles = new List<Tile>();
+
+    // -------------------------------------------------------------------------
 
     private void Awake()
     {
@@ -64,39 +78,42 @@ public class GameManager : MonoBehaviour
     {
         if (Mouse.current == null) return;
         HandleHover();
-        if (Mouse.current.leftButton.wasPressedThisFrame)
-            HandleClick();
+        if (Mouse.current.leftButton.wasPressedThisFrame) HandleClick();
     }
 
     private void HandleHover()
     {
-        Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+        Ray  ray      = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
         Tile newHover = null;
-
         if (Physics.Raycast(ray, out RaycastHit hit))
             newHover = hit.collider.GetComponentInParent<Tile>();
-
-        if (newHover == _selectedTile)
-            newHover = null;
-
+        if (newHover == _selectedTile) newHover = null;
         if (newHover == _hoveredTile) return;
-
-        if (_hoveredTile != null)
-        {
-            _hoveredTile.SetHovered(false);
-            if (UIManager.Instance != null)
-                UIManager.Instance.HideTooltip();
-        }
-
+        if (_hoveredTile != null) { _hoveredTile.SetHovered(false); UIManager.Instance?.HideTooltip(); }
         _hoveredTile = newHover;
+        if (_hoveredTile != null) { _hoveredTile.SetHovered(true); UIManager.Instance?.ShowTooltip(_hoveredTile); }
+    }
 
-        if (_hoveredTile != null)
+    private void HandleClick()
+    {
+        if (CurrentState == GameState.GameOver) return;
+        Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+        Tile clicked = hit.collider.GetComponentInParent<Tile>();
+        if (clicked == null) return;
+
+        switch (CurrentState)
         {
-            _hoveredTile.SetHovered(true);
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowTooltip(_hoveredTile);
+            case GameState.InitialPlacement: HandlePlacementClick(clicked); break;
+            case GameState.Reinforce:        HandleReinforceClick(clicked); break;
+            case GameState.Attack:           HandleAttackClick(clicked);    break;
+            case GameState.Fortify:          HandleFortifyClick(clicked);   break;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // INITIALIZATION
+    // -------------------------------------------------------------------------
 
     private void InitializeGame()
     {
@@ -105,99 +122,147 @@ public class GameManager : MonoBehaviour
             if (t.Terrain != TerrainType.Water && t.Terrain != TerrainType.Mountain)
                 passable.Add(t);
 
-        passable.Sort((a, b) => a.HexCoordinates.x.CompareTo(b.HexCoordinates.x));
+        Shuffle(passable);
 
-        List<Tile> cluster0 = FindStartCluster(passable, fromWest: true, excluded: null);
+        for (int i = 0; i < passable.Count; i++)
+        {
+            Tile t = passable[i];
+            t.OwnerPlayerId = i % PlayerCount;
+            t.AddCubes(1);
+            t.UpdateVisuals();
+        }
 
-        HashSet<Tile> exclusion = new HashSet<Tile>(cluster0);
-        foreach (Tile t in cluster0)
-            foreach (Tile n in HexGridManager.Instance.GetNeighbors(t.HexCoordinates))
-                exclusion.Add(n);
+        for (int pid = 0; pid < PlayerCount; pid++)
+            _extraTroopsLeft[pid] = ExtraTroopsPerPlayer;
 
-        List<Tile> cluster1 = FindStartCluster(passable, fromWest: false, excluded: exclusion);
-
-        PlaceStartCluster(0, cluster0);
-        PlaceStartCluster(1, cluster1);
-
-        RecalculatePrestige();
+        AssignMissions();
         HexGridManager.Instance.RefreshAllBorders();
         AudioManager.Instance?.PlayTurnStart();
+        BeginInitialPlacement();
+    }
+
+    private static void Shuffle<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            T tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+        }
+    }
+
+    private void AssignMissions()
+    {
+        HashSet<int> regionSet = new HashSet<int>();
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+            if (t.ContinentId >= 0 && t.Terrain != TerrainType.Water && t.Terrain != TerrainType.Mountain)
+                regionSet.Add(t.ContinentId);
+        List<int> regions = new List<int>(regionSet);
+
+        List<Mission> pool = new List<Mission>();
+        pool.Add(new Mission { Type = MissionType.ControlTerritories, TargetCount = 24,
+            Description = "Control 24 territories" });
+        for (int pid = 0; pid < PlayerCount; pid++)
+            pool.Add(new Mission { Type = MissionType.DestroyPlayer, TargetPlayer = pid,
+                Description = $"Destroy {ClanNames[pid]}" });
+        if (regions.Count >= 2)
+            for (int i = 0; i < regions.Count - 1; i++)
+                for (int j = i + 1; j < regions.Count; j++)
+                    pool.Add(new Mission { Type = MissionType.ControlTwoRegions,
+                        TargetRegions = new[] { regions[i], regions[j] },
+                        Description = $"Control {SafeRegionName(regions[i])} & {SafeRegionName(regions[j])}" });
+
+        Shuffle(pool);
+
+        for (int pid = 0; pid < PlayerCount; pid++)
+        {
+            Mission m = pool[pid % pool.Count];
+            if (m.Type == MissionType.DestroyPlayer && m.TargetPlayer == pid)
+                m = new Mission { Type = MissionType.ControlTerritories, TargetCount = 24,
+                    Description = "Control 24 territories" };
+            _playerMissions[pid] = m;
+        }
+    }
+
+    private static string SafeRegionName(int id) =>
+        id >= 0 && id < RegionNames.Length ? RegionNames[id] : $"Region {id}";
+
+    // -------------------------------------------------------------------------
+    // INITIAL PLACEMENT
+    // -------------------------------------------------------------------------
+
+    private void BeginInitialPlacement()
+    {
+        CurrentState  = GameState.InitialPlacement;
+        _placementTurn = 0;
+        AdvancePlacement();
+    }
+
+    private void AdvancePlacement()
+    {
+        for (int tries = 0; tries < PlayerCount; tries++)
+        {
+            int pid = _placementTurn % PlayerCount;
+            if (_extraTroopsLeft[pid] > 0)
+            {
+                CurrentPlayerId = pid;
+                HighlightOwnTiles(pid);
+                UIManager.Instance?.UpdateUI();
+                UIManager.Instance?.ShowPhaseTransition("PLACE TROOPS", UIManager.GetClanColor(pid));
+                UIManager.Instance?.ShowMessage(
+                    $"PLACEMENT — {ClanNames[pid]}: click any of your territories. {_extraTroopsLeft[pid]} left.");
+                return;
+            }
+            _placementTurn++;
+        }
+
+        ClearHighlights();
+        CurrentPlayerId = 0;
         StartReinforce();
     }
 
-    private List<Tile> FindStartCluster(List<Tile> sortedPassable, bool fromWest, HashSet<Tile> excluded)
+    private void HandlePlacementClick(Tile clicked)
     {
-        IEnumerable<Tile> seeds = fromWest
-            ? (IEnumerable<Tile>)sortedPassable
-            : System.Linq.Enumerable.Reverse(sortedPassable);
+        if (clicked.OwnerPlayerId != CurrentPlayerId) return;
+        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
 
-        HashSet<Tile> available = new HashSet<Tile>(sortedPassable);
-        if (excluded != null)
-            foreach (Tile t in excluded) available.Remove(t);
+        clicked.AddCubes(1);
+        _extraTroopsLeft[CurrentPlayerId]--;
 
-        foreach (Tile seed in seeds)
-        {
-            if (!available.Contains(seed)) continue;
-            List<Tile> cluster = GrowCluster(seed, available, 3);
-            if (cluster.Count == 3) return cluster;
-        }
-
-        List<Tile> fallback = new List<Tile>();
-        foreach (Tile t in available) { fallback.Add(t); if (fallback.Count == 3) break; }
-        return fallback;
+        // Round-robin: pass to the next player after every single troop placed.
+        _placementTurn = (CurrentPlayerId + 1) % PlayerCount;
+        ClearHighlights();
+        AdvancePlacement();
     }
 
-    private List<Tile> GrowCluster(Tile seed, HashSet<Tile> available, int targetCount)
+    public void OnRandomizePlacement()
     {
-        List<Tile> cluster = new List<Tile> { seed };
-        Queue<Tile> frontier = new Queue<Tile>();
-        frontier.Enqueue(seed);
-
-        while (cluster.Count < targetCount && frontier.Count > 0)
-        {
-            Tile current = frontier.Dequeue();
-            foreach (Tile n in HexGridManager.Instance.GetNeighbors(current.HexCoordinates))
-            {
-                if (!available.Contains(n) || cluster.Contains(n)) continue;
-                cluster.Add(n);
-                frontier.Enqueue(n);
-                if (cluster.Count >= targetCount) break;
-            }
-        }
-        return cluster;
+        if (CurrentState != GameState.InitialPlacement) return;
+        RandomizeForPlayer(CurrentPlayerId);
+        _placementTurn = (CurrentPlayerId + 1) % PlayerCount;
+        ClearHighlights();
+        AdvancePlacement();
     }
 
-    // Places starting warriors and one yurt per clan (on the first tile of the cluster).
-    // Clears any neutral garrison HexGridManager seeded so the cluster starts at exactly 1 warrior.
-    private void PlaceStartCluster(int playerId, List<Tile> cluster)
+    public void OnRandomizeAll()
     {
-        for (int i = 0; i < cluster.Count; i++)
-        {
-            Tile tile = cluster[i];
-            if (tile.CubeCount > 0) tile.RemoveCubes(tile.CubeCount);
-            tile.OwnerPlayerId = playerId;
-            tile.AddCubes(1);
-            if (i == 0) tile.SetHasYurt(true); // nomadic base: 1 yurt per clan
-            tile.UpdateVisuals();
-        }
+        if (CurrentState != GameState.InitialPlacement) return;
+        for (int pid = 0; pid < PlayerCount; pid++)
+            if (_extraTroopsLeft[pid] > 0) RandomizeForPlayer(pid);
+        ClearHighlights();
+        CurrentPlayerId = 0;
+        StartReinforce();
     }
 
-    private void HandleClick()
+    private void RandomizeForPlayer(int pid)
     {
-        if (CurrentState == GameState.GameOver) return;
-
-        Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
-
-        Tile clicked = hit.collider.GetComponentInParent<Tile>();
-        if (clicked == null) return;
-
-        switch (CurrentState)
-        {
-            case GameState.Reinforce:      HandleReinforceClick(clicked);  break;
-            case GameState.Action:         HandleActionClick(clicked);     break;
-            case GameState.MigrationCheck: HandleMigrationClick(clicked);  break;
-        }
+        List<Tile> own = new List<Tile>();
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+            if (t.OwnerPlayerId == pid && t.Terrain != TerrainType.Water && t.Terrain != TerrainType.Mountain)
+                own.Add(t);
+        int n = _extraTroopsLeft[pid];
+        for (int i = 0; i < n && own.Count > 0; i++)
+            own[Random.Range(0, own.Count)].AddCubes(1);
+        _extraTroopsLeft[pid] = 0;
     }
 
     // -------------------------------------------------------------------------
@@ -206,79 +271,38 @@ public class GameManager : MonoBehaviour
 
     private void StartReinforce()
     {
-        // Confirm contested tiles the current player still holds (second-conquest rule)
-        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-            if (tile.IsContested && tile.OwnerPlayerId == CurrentPlayerId)
-                tile.SetContested(false);
-
         CurrentState   = GameState.Reinforce;
         _reinforceLeft = CalculateReinforcements(CurrentPlayerId);
         ClearSelection();
-
-        RecalculatePrestige();
+        HighlightOwnTiles(CurrentPlayerId);
         AudioManager.Instance?.PlayTurnStart();
-
-        HighlightReinforceTargets();
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            int yurtCount = CountYurts(CurrentPlayerId);
-            string targetDesc;
-            if (yurtCount > 1)      targetDesc = $"any of your {yurtCount} yurts (split however you like)";
-            else if (yurtCount == 1) targetDesc = "your yurt";
-            else                     targetDesc = "any of your tiles";
-            string bonusNote = yurtCount > 1 ? $" — includes +{yurtCount - 1} from conquered yurt(s)" : "";
-            UIManager.Instance.ShowMessage(
-                $"REINFORCE: Place {_reinforceLeft} warrior(s) on {targetDesc}{bonusNote}.");
-        }
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowPhaseTransition("REINFORCE", UIManager.GetClanColor(CurrentPlayerId));
+        UIManager.Instance?.ShowMessage($"REINFORCE: Place {_reinforceLeft} troop(s) on your territories.");
     }
 
     private int CalculateReinforcements(int playerId)
     {
-        int ownedCount = 0;
-        int yurtCount  = 0;
-        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-        {
-            if (tile.OwnerPlayerId != playerId) continue;
-            if (tile.IsContested) continue;
-            ownedCount++;
-            if (tile.HasYurt) yurtCount++;
-        }
-        // Base is max(3, tiles/3). Each *extra* yurt beyond the first adds +1
-        // (conquering an enemy yurt goes from 3 to 4, two conquests → 5, etc.).
-        return Mathf.Max(3, ownedCount / 3) + Mathf.Max(0, yurtCount - 1);
-    }
-
-    private int CountYurts(int playerId)
-    {
-        int n = 0;
+        int owned = 0;
         foreach (Tile t in HexGridManager.Instance.Grid.Values)
-            if (t.HasYurt && t.OwnerPlayerId == playerId && !t.IsContested) n++;
-        return n;
+            if (t.OwnerPlayerId == playerId) owned++;
+        int bonus = 0;
+        for (int r = 0; r < RegionBonuses.Length; r++)
+            if (PlayerControlsRegion(playerId, r)) bonus += RegionBonuses[r];
+        return Mathf.Max(3, owned / 3) + bonus;
     }
 
-    // Highlights valid reinforce targets: yurt tiles when available, all owned tiles as fallback.
-    private void HighlightReinforceTargets()
+    private bool PlayerControlsRegion(int playerId, int regionId)
     {
-        ClearHighlights();
-        bool hasYurt = PlayerHasYurt(CurrentPlayerId);
-        foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-        {
-            if (tile.OwnerPlayerId != CurrentPlayerId) continue;
-            if (tile.Terrain == TerrainType.Water || tile.Terrain == TerrainType.Mountain) continue;
-            bool isValidTarget = hasYurt ? tile.HasYurt : true;
-            if (!isValidTarget) continue;
-            tile.SetHighlighted(true, _yurtMoveHighlight);
-            _highlightedTiles.Add(tile);
-        }
-    }
-
-    private bool PlayerHasYurt(int playerId)
-    {
+        bool hasAny = false;
         foreach (Tile t in HexGridManager.Instance.Grid.Values)
-            if (t.HasYurt && t.OwnerPlayerId == playerId) return true;
-        return false;
+        {
+            if (t.ContinentId != regionId) continue;
+            if (t.Terrain == TerrainType.Water || t.Terrain == TerrainType.Mountain) continue;
+            hasAny = true;
+            if (t.OwnerPlayerId != playerId) return false;
+        }
+        return hasAny;
     }
 
     private void HandleReinforceClick(Tile clicked)
@@ -286,471 +310,192 @@ public class GameManager : MonoBehaviour
         if (clicked.OwnerPlayerId != CurrentPlayerId) return;
         if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
 
-        // Warriors spawn at the yurt (nomadic base). Fall back to any own tile if yurt is lost.
-        bool hasYurt = PlayerHasYurt(CurrentPlayerId);
-        if (hasYurt && !clicked.HasYurt)
-        {
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage(
-                    $"Warriors must be placed on a yurt tile. {_reinforceLeft} left to place.");
-            return;
-        }
-
         clicked.AddCubes(1);
         _reinforceLeft--;
 
-        if (UIManager.Instance != null)
-        {
-            if (_reinforceLeft > 0)
-                UIManager.Instance.ShowMessage(
-                    $"REINFORCE: {_reinforceLeft} warrior(s) left — click any of your yurts.");
-            else
-                UIManager.Instance.ShowMessage("All warriors placed. Moving to Action phase...");
-        }
-
-        if (_reinforceLeft <= 0)
-        {
-            ClearHighlights();
-            StartAction();
-        }
+        if (_reinforceLeft <= 0) { ClearHighlights(); StartAttack(); }
+        else UIManager.Instance?.ShowMessage($"REINFORCE: {_reinforceLeft} troop(s) left to place.");
     }
 
-    // -------------------------------------------------------------------------
-    // ACTION
-    // -------------------------------------------------------------------------
-
-    private void StartAction()
+    private void HighlightOwnTiles(int playerId)
     {
-        CurrentState = GameState.Action;
-        ClearSelection();
-
-        if (UIManager.Instance != null)
+        ClearHighlights();
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
         {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+            if (t.OwnerPlayerId != playerId) continue;
+            if (t.Terrain == TerrainType.Water || t.Terrain == TerrainType.Mountain) continue;
+            t.SetHighlighted(true, _reinforceHighlight);
+            _highlightedTiles.Add(t);
         }
     }
 
-    private void HandleActionClick(Tile clicked)
+    // -------------------------------------------------------------------------
+    // ATTACK
+    // -------------------------------------------------------------------------
+
+    private void StartAttack()
+    {
+        CurrentState = GameState.Attack;
+        ClearSelection();
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowPhaseTransition("ATTACK", UIManager.GetClanColor(CurrentPlayerId));
+        UIManager.Instance?.ShowMessage("ATTACK: Select a territory with 2+ troops. Press End Attack when done.");
+    }
+
+    private void HandleAttackClick(Tile clicked)
     {
         if (_selectedTile == null)
         {
             if (clicked.OwnerPlayerId != CurrentPlayerId) return;
             if (clicked.CubeCount < 2) return;
             if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
-
-            _selectedTile = clicked;
-            _selectedTile.SetSelected(true);
-            HighlightAttackTargets(_selectedTile);
-
-            string forestNote = clicked.HasForest ? " [Forest: +1 bonus die]" : "";
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage(
-                    $"Selected tile with {clicked.CubeCount} warriors{forestNote}. Click a red enemy tile to attack.");
+            _selectedTile = clicked; _selectedTile.SetSelected(true);
+            HighlightAttackTargets();
+            UIManager.Instance?.ShowMessage($"Selected: {clicked.CubeCount} troops. Click adjacent enemy territory.");
             return;
         }
 
         if (clicked == _selectedTile)
         {
             ClearSelection();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage(
-                    "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+            UIManager.Instance?.ShowMessage("ATTACK: Select a territory with 2+ troops. Press End Attack when done.");
             return;
         }
 
         if (clicked.OwnerPlayerId == CurrentPlayerId)
         {
             ClearSelection();
-            if (clicked.CubeCount >= 2 &&
-                clicked.Terrain != TerrainType.Water &&
-                clicked.Terrain != TerrainType.Mountain)
+            if (clicked.CubeCount >= 2 && clicked.Terrain != TerrainType.Water && clicked.Terrain != TerrainType.Mountain)
             {
-                _selectedTile = clicked;
-                _selectedTile.SetSelected(true);
-                HighlightAttackTargets(_selectedTile);
-                string forestNote = clicked.HasForest ? " [Forest: +1 bonus die]" : "";
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage(
-                        $"Selected tile with {clicked.CubeCount} warriors{forestNote}. Click a red enemy tile to attack.");
-            }
-            else
-            {
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage(
-                        "ACTION: Select one of your tiles with 2+ warriors to attack. Press End Turn when done.");
+                _selectedTile = clicked; _selectedTile.SetSelected(true);
+                HighlightAttackTargets();
+                UIManager.Instance?.ShowMessage($"Selected: {clicked.CubeCount} troops. Click adjacent enemy territory.");
             }
             return;
         }
 
-        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain)
+        if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
+        if (!HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates).Contains(clicked))
         {
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Cannot attack water or mountain tiles.");
-            return;
-        }
-
-        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates);
-        if (!neighbors.Contains(clicked))
-        {
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Target must be adjacent to the selected tile.");
-            return;
-        }
-
-        // Empty neutral land — walk in for free. Garrisoned neutrals fight back via the
-        // standard combat resolver (see PopulateNeutralGarrisons in HexGridManager).
-        if (clicked.OwnerPlayerId == -1 && clicked.CubeCount == 0)
-        {
-            ExpandIntoNeutral(_selectedTile, clicked);
+            UIManager.Instance?.ShowMessage("Target must be adjacent to the selected territory.");
             return;
         }
 
         BeginCombatSetup(_selectedTile, clicked);
     }
 
-    private void ExpandIntoNeutral(Tile source, Tile target)
+    private void HighlightAttackTargets()
     {
-        int moving = source.CubeCount - 1;
-        source.RemoveCubes(moving);
-        target.OwnerPlayerId = CurrentPlayerId;
-        target.AddCubes(moving);
-        target.UpdateVisuals();
-        source.UpdateVisuals();
-
-        target.TriggerConquestPulse();
-        AudioManager.Instance?.PlayConquer();
-
-        RecalculatePrestige();
-        HexGridManager.Instance.RefreshAllBorders();
-        if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
-
-        if (CheckWinCondition()) return;
-
-        ClearSelection();
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowMessage(
-                "Expanded into neutral territory. Select another tile or press End Turn.");
+        ClearHighlights();
+        foreach (Tile n in HexGridManager.Instance.GetNeighbors(_selectedTile.HexCoordinates))
+        {
+            if (n.OwnerPlayerId == CurrentPlayerId) continue;
+            if (n.Terrain == TerrainType.Water || n.Terrain == TerrainType.Mountain) continue;
+            n.SetHighlighted(true, _attackHighlight);
+            _highlightedTiles.Add(n);
+        }
     }
 
-    // Opens the modal combat-setup panel so each side can pick its dice count.
     private void BeginCombatSetup(Tile attacker, Tile defender)
     {
         _pendingAttacker = attacker;
         _pendingDefender = defender;
-
         int maxAtk = Mathf.Min(3, attacker.CubeCount - 1);
-        int maxDef = Mathf.Min(2, defender.CubeCount);
-
+        int maxDef = Mathf.Max(1, Mathf.Min(2, defender.CubeCount));
         CurrentState = GameState.CombatSetup;
         ClearHighlights();
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowCombatSetup(
-                CurrentPlayerId, 1 - CurrentPlayerId,
-                maxAtk, maxDef,
-                ClanNames[CurrentPlayerId],
-                ClanNames[1 - CurrentPlayerId]);
-        }
+        string defName = defender.OwnerPlayerId >= 0 ? ClanNames[defender.OwnerPlayerId] : "Neutral";
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowCombatSetup(
+            CurrentPlayerId, defender.OwnerPlayerId,
+            maxAtk, maxDef,
+            ClanNames[CurrentPlayerId], defName);
     }
 
-    // Wired to the Resolve button on the combat-setup panel.
     public void OnCombatSetupConfirm(int atkDice, int defDice)
     {
-        if (CurrentState != GameState.CombatSetup) return;
-        if (_pendingAttacker == null || _pendingDefender == null) return;
+        if (CurrentState != GameState.CombatSetup || _pendingAttacker == null || _pendingDefender == null) return;
 
         Tile attacker = _pendingAttacker;
         Tile defender = _pendingDefender;
+        int  prevOwner = defender.OwnerPlayerId;
         bool forestBonus = attacker.HasForest;
 
         attacker.PlayAttackAnimation();
         defender.PlayAttackAnimation();
 
-        bool conquered = CombatManager.Instance.ResolveCombat(
-            attacker, defender, atkDice, defDice, forestBonus);
+        bool conquered = CombatManager.Instance.ResolveCombat(attacker, defender, atkDice, defDice, forestBonus);
 
         if (conquered)
         {
             defender.OwnerPlayerId = CurrentPlayerId;
-            defender.SetContested(true);
             defender.TriggerConquestPulse();
             AudioManager.Instance?.PlayConquer();
+            HexGridManager.Instance.RefreshAllBorders();
         }
-        else
-        {
-            AudioManager.Instance?.PlayAttack();
-        }
+        else AudioManager.Instance?.PlayAttack();
 
         attacker.UpdateVisuals();
         defender.UpdateVisuals();
 
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideCombatSetup();
-            UIManager.Instance.ShowCombatResult(
-                CombatManager.Instance.LastResult,
-                CurrentPlayerId, 1 - CurrentPlayerId,
-                ClanNames[CurrentPlayerId],
-                ClanNames[1 - CurrentPlayerId]);
-        }
+        UIManager.Instance?.HideCombatSetup();
+        UIManager.Instance?.ShowCombatResult(
+            CombatManager.Instance.LastResult,
+            CurrentPlayerId, prevOwner,
+            ClanNames[CurrentPlayerId],
+            prevOwner >= 0 ? ClanNames[prevOwner] : "Neutral");
+        UIManager.Instance?.UpdateUI();
 
-        RecalculatePrestige();
-        if (conquered) HexGridManager.Instance.RefreshAllBorders();
-        if (UIManager.Instance != null) UIManager.Instance.UpdateUI();
-
-        if (CheckWinCondition()) return;
-
-        ClearSelection();
+        _pendingAttacker = null;
+        _pendingDefender = null;
 
         if (conquered)
         {
-            // Risk rule: attacker must advance into the conquered tile.
+            bool win = CheckPlayerEliminated(prevOwner) || CheckWinCondition();
+            if (win) return;
             _postConquestSource = attacker;
             _postConquestDest   = defender;
-            _pendingAttacker    = null;
-            _pendingDefender    = null;
             BeginPostConquestMove();
             return;
         }
 
-        _pendingAttacker = null;
-        _pendingDefender = null;
-        CurrentState = GameState.Action;
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage("ACTION: Select another tile to attack, or press End Turn.");
-        }
+        ClearSelection();
+        CurrentState = GameState.Attack;
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
     }
 
-    // Shows the advance panel after a successful conquest (Risk: must move ≥1 troop forward).
-    private void BeginPostConquestMove()
-    {
-        if (_postConquestSource == null || _postConquestDest == null) return;
-        int max = Mathf.Max(1, _postConquestSource.CubeCount - 1);
-        CurrentState = GameState.PostConquest;
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMigrationCount(max, max, "Advance troops");
-            UIManager.Instance.ShowMessage($"ADVANCE: Move warriors into conquered territory (1–{max}). Must advance at least 1.");
-        }
-    }
-
-    // Wired to the Cancel button on the combat-setup panel.
     public void OnCombatSetupCancel()
     {
         if (CurrentState != GameState.CombatSetup) return;
         _pendingAttacker = null;
         _pendingDefender = null;
-        CurrentState = GameState.Action;
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideCombatSetup();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage("Combat cancelled. Select another tile or press End Turn.");
-        }
-
+        CurrentState = GameState.Attack;
+        UIManager.Instance?.HideCombatSetup();
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowMessage("Combat cancelled. Select another territory or press End Attack.");
         ClearSelection();
     }
 
-    private void HighlightAttackTargets(Tile source)
+    private void BeginPostConquestMove()
     {
-        ClearHighlights();
-        List<Tile> neighbors = HexGridManager.Instance.GetNeighbors(source.HexCoordinates);
-        foreach (Tile neighbor in neighbors)
+        int max = _postConquestSource.CubeCount - 1;
+        if (max <= 0)
         {
-            if (neighbor.OwnerPlayerId == CurrentPlayerId) continue;
-            if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
-            // Empty neutral = walk-in (yellow). Garrisoned neutral = real fight (red).
-            bool emptyNeutral = neighbor.OwnerPlayerId == -1 && neighbor.CubeCount == 0;
-            Color highlight = emptyNeutral ? _neutralHighlight : _attackHighlight;
-            neighbor.SetHighlighted(true, highlight);
-            _highlightedTiles.Add(neighbor);
+            _postConquestSource = null; _postConquestDest = null;
+            CurrentState = GameState.Attack;
+            ClearSelection();
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
+            return;
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // MIGRATION (civ-style 2-point movement + yurt relocation)
-    // -------------------------------------------------------------------------
-
-    private void StartMigration()
-    {
-        CurrentState   = GameState.MigrationCheck;
-        _migrationUsed = false;
+        CurrentState = GameState.PostConquest;
         ClearSelection();
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "MIGRATION: Move warriors (2 MP budget) or relocate your yurt, then End Turn.");
-        }
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowMigrationCount(max, max, "Move extra troops (optional)");
+        UIManager.Instance?.ShowMessage($"ADVANCE: Move extra troops to conquered territory (1–{max}), or Cancel to skip.");
     }
 
-    private void HandleMigrationClick(Tile clicked)
-    {
-        if (_migrationUsed)
-        {
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Migration already used this turn. Press End Turn.");
-            return;
-        }
-
-        if (_selectedTile == null)
-        {
-            if (clicked.OwnerPlayerId != CurrentPlayerId) return;
-            if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
-
-            bool canMoveYurt     = clicked.HasYurt;
-            bool canMoveWarriors = clicked.CubeCount >= 2;
-            if (!canMoveYurt && !canMoveWarriors) return;
-
-            // Both options available — let the player choose.
-            if (canMoveYurt && canMoveWarriors)
-            {
-                _selectedTile = clicked;
-                _selectedTile.SetSelected(true);
-                CurrentState = GameState.MigrationChoice;
-                if (UIManager.Instance != null)
-                {
-                    UIManager.Instance.UpdateUI();
-                    UIManager.Instance.ShowMigrationChoice();
-                    UIManager.Instance.ShowMessage("Move soldiers or relocate the yurt?");
-                }
-                return;
-            }
-
-            // Single-option tiles enter the matching mode directly.
-            _selectedTile = clicked;
-            _selectedTile.SetSelected(true);
-            if (canMoveYurt)
-            {
-                _yurtMigrationMode = true;
-                HighlightYurtTargets(_selectedTile);
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage(
-                        "YURT: Click an adjacent own tile to relocate (1-tile range).");
-            }
-            else
-            {
-                _yurtMigrationMode = false;
-                HighlightMigrationTargets(_selectedTile);
-                if (UIManager.Instance != null)
-                    UIManager.Instance.ShowMessage(
-                        "Click any of your tiles to migrate warriors. You will pick how many.");
-            }
-            return;
-        }
-
-        if (clicked == _selectedTile)
-        {
-            ClearSelection();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage(
-                    "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
-            return;
-        }
-
-        if (clicked.OwnerPlayerId != CurrentPlayerId)
-        {
-            ClearSelection();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Migration only moves to your own tiles. Select again.");
-            return;
-        }
-
-        if (!_reachableTiles.ContainsKey(clicked))
-        {
-            ClearSelection();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("Destination not reachable through your territory. Select again.");
-            return;
-        }
-
-        if (_yurtMigrationMode)
-        {
-            ExecuteYurtMove(_selectedTile, clicked);
-        }
-        else
-        {
-            BeginMigrationCount(clicked);
-        }
-    }
-
-    // Wired to the "Move Soldiers" button on the migration choice panel.
-    public void OnMigrationChooseSoldiers()
-    {
-        if (CurrentState != GameState.MigrationChoice || _selectedTile == null) return;
-        _yurtMigrationMode = false;
-        CurrentState = GameState.MigrationCheck;
-        HighlightMigrationTargets(_selectedTile);
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideMigrationChoice();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "Click any of your tiles to migrate warriors. You will pick how many.");
-        }
-    }
-
-    // Wired to the "Move Yurta" button on the migration choice panel.
-    public void OnMigrationChooseYurta()
-    {
-        if (CurrentState != GameState.MigrationChoice || _selectedTile == null) return;
-        _yurtMigrationMode = true;
-        CurrentState = GameState.MigrationCheck;
-        HighlightYurtTargets(_selectedTile);
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideMigrationChoice();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "YURT: Click an adjacent own tile to relocate (1-tile range).");
-        }
-    }
-
-    // Wired to the Cancel button on the migration choice panel.
-    public void OnMigrationChoiceCancel()
-    {
-        if (CurrentState != GameState.MigrationChoice) return;
-        CurrentState = GameState.MigrationCheck;
-        ClearSelection();
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideMigrationChoice();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
-        }
-    }
-
-    // Opens the migration count panel for warrior migration.
-    private void BeginMigrationCount(Tile destination)
-    {
-        if (_selectedTile == null) return;
-
-        _pendingMigrationDest = destination;
-        int max = Mathf.Max(1, _selectedTile.CubeCount - 1);
-        CurrentState = GameState.MigrationCount;
-        ClearHighlights();
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMigrationCount(max, max);
-            UIManager.Instance.ShowMessage("Pick how many warriors to migrate, then Confirm.");
-        }
-    }
-
-    // Wired to the Confirm button on the migration count panel.
     public void OnMigrationCountConfirm(int count)
     {
         if (CurrentState == GameState.PostConquest)
@@ -764,211 +509,194 @@ public class GameManager : MonoBehaviour
                 _postConquestSource.UpdateVisuals();
                 _postConquestDest.UpdateVisuals();
             }
-            _postConquestSource = null;
-            _postConquestDest   = null;
-            CurrentState = GameState.Action;
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.HideMigrationCount();
-                UIManager.Instance.UpdateUI();
-                UIManager.Instance.ShowMessage("ACTION: Select another tile to attack, or press End Turn.");
-            }
+            _postConquestSource = null; _postConquestDest = null;
+            CurrentState = GameState.Attack;
+            UIManager.Instance?.HideMigrationCount();
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
             return;
         }
 
-        if (CurrentState != GameState.MigrationCount) return;
-        if (_selectedTile == null || _pendingMigrationDest == null) return;
-
-        int actual = Mathf.Clamp(count, 1, _selectedTile.CubeCount - 1);
-        _selectedTile.PlayWalkAnimation();
-        _selectedTile.RemoveCubes(actual);
-        _pendingMigrationDest.AddCubes(actual);
-        _pendingMigrationDest.UpdateVisuals();
-
-        _migrationUsed = true;
-        AudioManager.Instance?.PlayMigration();
-
-        _pendingMigrationDest = null;
-        CurrentState = GameState.MigrationCheck;
-        ClearSelection();
-
-        if (UIManager.Instance != null)
+        if (CurrentState == GameState.Fortify && _fortifySource != null && _selectedTile != null)
         {
-            UIManager.Instance.HideMigrationCount();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage($"Moved {actual} warrior(s). Press End Turn to finish.");
+            int actual = Mathf.Clamp(count, 1, _fortifySource.CubeCount - 1);
+            _fortifySource.PlayWalkAnimation();
+            _fortifySource.RemoveCubes(actual);
+            _selectedTile.AddCubes(actual);
+            _fortifySource.UpdateVisuals();
+            _selectedTile.UpdateVisuals();
+            _fortifyUsed   = true;
+            _fortifySource = null;
+            ClearSelection();
+            UIManager.Instance?.HideMigrationCount();
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("Fortify complete. Press End Turn.");
         }
     }
 
-    // Wired to the Cancel button on the migration count panel.
     public void OnMigrationCountCancel()
     {
-        // During post-conquest the player must advance; cancel forces the minimum of 1.
         if (CurrentState == GameState.PostConquest)
         {
-            OnMigrationCountConfirm(1);
-            return;
-        }
-
-        if (CurrentState != GameState.MigrationCount) return;
-        _pendingMigrationDest = null;
-        CurrentState = GameState.MigrationCheck;
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.HideMigrationCount();
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage(
-                "MIGRATION: Move warriors or relocate your yurt, then End Turn.");
-        }
-
-        ClearSelection();
-    }
-
-    private void ExecuteYurtMove(Tile source, Tile destination)
-    {
-        // Safety: never overwrite an existing yurt — one per tile only.
-        if (destination.HasYurt)
-        {
+            _postConquestSource = null; _postConquestDest = null;
+            CurrentState = GameState.Attack;
             ClearSelection();
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowMessage("That tile already has a yurt. Pick another destination.");
+            UIManager.Instance?.HideMigrationCount();
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("ATTACK: Select another territory or press End Attack.");
             return;
         }
-
-        // Yurt migrates alone — soldiers stay where they are.
-        source.SetHasYurt(false);
-        destination.SetHasYurt(true);
-        source.UpdateVisuals();
-        destination.UpdateVisuals();
-        destination.TriggerConquestPulse();
-        _migrationUsed = true;
-        ClearSelection();
-        AudioManager.Instance?.PlayMigration();
-        RecalculatePrestige();
-        if (UIManager.Instance != null)
+        if (CurrentState == GameState.Fortify)
         {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowMessage("Yurt relocated! Press End Turn to finish.");
-        }
-    }
-
-    // BFS through own tiles. Any tile connected to the source by a chain of own
-    // (non-water, non-mountain) tiles is reachable — no movement-point cap.
-    private Dictionary<Tile, int> GetMigrationReachable(Tile source)
-    {
-        Dictionary<Tile, int> costMap = new Dictionary<Tile, int>();
-        Queue<Tile> queue = new Queue<Tile>();
-        queue.Enqueue(source);
-        HashSet<Tile> visited = new HashSet<Tile> { source };
-
-        while (queue.Count > 0)
-        {
-            Tile current = queue.Dequeue();
-            foreach (Tile neighbor in HexGridManager.Instance.GetNeighbors(current.HexCoordinates))
-            {
-                if (visited.Contains(neighbor)) continue;
-                if (neighbor.OwnerPlayerId != CurrentPlayerId) continue;
-                if (neighbor.Terrain == TerrainType.Water || neighbor.Terrain == TerrainType.Mountain) continue;
-
-                visited.Add(neighbor);
-                costMap[neighbor] = 1;
-                queue.Enqueue(neighbor);
-            }
-        }
-        return costMap;
-    }
-
-    private void HighlightMigrationTargets(Tile source)
-    {
-        ClearHighlights();
-        _reachableTiles = GetMigrationReachable(source);
-        foreach (Tile target in _reachableTiles.Keys)
-        {
-            target.SetHighlighted(true, _migrationHighlight);
-            _highlightedTiles.Add(target);
-        }
-    }
-
-    private void HighlightYurtTargets(Tile source)
-    {
-        // Yurta migration is capped at 1 tile per turn, and only one yurt per tile is allowed.
-        ClearHighlights();
-        _reachableTiles = new Dictionary<Tile, int>();
-        foreach (Tile n in HexGridManager.Instance.GetNeighbors(source.HexCoordinates))
-        {
-            if (n.OwnerPlayerId != CurrentPlayerId) continue;
-            if (n.Terrain == TerrainType.Water || n.Terrain == TerrainType.Mountain) continue;
-            if (n.HasYurt) continue; // unique-building rule: one yurt per tile
-            _reachableTiles[n] = 1;
-            n.SetHighlighted(true, _yurtMoveHighlight);
-            _highlightedTiles.Add(n);
+            _fortifySource = null;
+            ClearSelection();
+            UIManager.Instance?.HideMigrationCount();
+            UIManager.Instance?.UpdateUI();
+            UIManager.Instance?.ShowMessage("FORTIFY: Select a territory to move troops. Press End Turn to skip.");
         }
     }
 
     // -------------------------------------------------------------------------
-    // TURN END / WIN
+    // FORTIFY
+    // -------------------------------------------------------------------------
+
+    private void StartFortify()
+    {
+        CurrentState  = GameState.Fortify;
+        _fortifyUsed  = false;
+        _fortifySource = null;
+        ClearSelection();
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowPhaseTransition("FORTIFY", UIManager.GetClanColor(CurrentPlayerId));
+        UIManager.Instance?.ShowMessage("FORTIFY: Move troops between connected territories, or press End Turn.");
+    }
+
+    private void HandleFortifyClick(Tile clicked)
+    {
+        if (_fortifyUsed) return;
+
+        if (_fortifySource == null)
+        {
+            if (clicked.OwnerPlayerId != CurrentPlayerId) return;
+            if (clicked.CubeCount < 2) return;
+            if (clicked.Terrain == TerrainType.Water || clicked.Terrain == TerrainType.Mountain) return;
+            _fortifySource = clicked;
+            _selectedTile  = clicked; _selectedTile.SetSelected(true);
+            HighlightFortifyTargets();
+            UIManager.Instance?.ShowMessage("FORTIFY: Click the destination territory.");
+            return;
+        }
+
+        if (clicked == _fortifySource) { _fortifySource = null; ClearSelection(); UIManager.Instance?.ShowMessage("FORTIFY: Select a source territory. Press End Turn to skip."); return; }
+
+        if (!_highlightedTiles.Contains(clicked)) { _fortifySource = null; ClearSelection(); return; }
+
+        Tile dest = clicked;
+        _selectedTile  = dest;
+        int max = _fortifySource.CubeCount - 1;
+        ClearHighlights();
+        UIManager.Instance?.ShowMigrationCount(max, max, "Fortify");
+        UIManager.Instance?.ShowMessage($"How many troops to move? (1–{max})");
+    }
+
+    private void HighlightFortifyTargets()
+    {
+        ClearHighlights();
+        foreach (Tile t in GetConnectedOwn(_fortifySource))
+        {
+            t.SetHighlighted(true, _fortifyHighlight);
+            _highlightedTiles.Add(t);
+        }
+    }
+
+    private HashSet<Tile> GetConnectedOwn(Tile source)
+    {
+        HashSet<Tile> visited = new HashSet<Tile> { source };
+        Queue<Tile>   queue   = new Queue<Tile>();
+        queue.Enqueue(source);
+        while (queue.Count > 0)
+        {
+            Tile cur = queue.Dequeue();
+            foreach (Tile n in HexGridManager.Instance.GetNeighbors(cur.HexCoordinates))
+            {
+                if (visited.Contains(n)) continue;
+                if (n.OwnerPlayerId != CurrentPlayerId) continue;
+                if (n.Terrain == TerrainType.Water || n.Terrain == TerrainType.Mountain) continue;
+                visited.Add(n); queue.Enqueue(n);
+            }
+        }
+        visited.Remove(source);
+        return visited;
+    }
+
+    // -------------------------------------------------------------------------
+    // TURN / WIN
     // -------------------------------------------------------------------------
 
     public void OnEndTurnButtonClicked()
     {
-        if (CurrentState == GameState.Action)
-        {
-            StartMigration();
-            return;
-        }
-
-        if (CurrentState == GameState.MigrationCheck)
-        {
-            EndTurn();
-            return;
-        }
+        if (CurrentState == GameState.Attack)  { StartFortify(); return; }
+        if (CurrentState == GameState.Fortify) { EndTurn(); return; }
     }
 
-    public void EndTurn()
+    private void EndTurn()
     {
         ClearSelection();
-        CurrentPlayerId = CurrentPlayerId == 0 ? 1 : 0;
+        int next = (CurrentPlayerId + 1) % PlayerCount;
+        for (int i = 0; i < PlayerCount; i++)
+        {
+            if (HasAnyTile(next)) break;
+            next = (next + 1) % PlayerCount;
+        }
+        CurrentPlayerId = next;
         StartReinforce();
     }
 
-    // -------------------------------------------------------------------------
-    // PRESTIGE / WIN CONDITION
-    // -------------------------------------------------------------------------
-
-    private void RecalculatePrestige()
+    private bool HasAnyTile(int pid)
     {
-        for (int pid = 0; pid < 2; pid++)
+        foreach (Tile t in HexGridManager.Instance.Grid.Values)
+            if (t.OwnerPlayerId == pid) return true;
+        return false;
+    }
+
+    private bool CheckPlayerEliminated(int candidate)
+    {
+        if (candidate < 0 || candidate == CurrentPlayerId || HasAnyTile(candidate)) return false;
+        UIManager.Instance?.ShowMessage($"{ClanNames[candidate]} has been eliminated!");
+        for (int pid = 0; pid < PlayerCount; pid++)
         {
-            int prestige = 0;
-            foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-            {
-                if (tile.OwnerPlayerId != pid) continue;
-                if (tile.IsContested) continue; // contested tiles don't count until confirmed
-                prestige += tile.IsKeyRegion ? 2 : 1;
-                if (tile.HasYurt) prestige += 2;
-            }
-            PlayerPrestige[pid] = prestige;
+            if (_playerMissions[pid]?.Type == MissionType.DestroyPlayer &&
+                _playerMissions[pid].TargetPlayer == candidate)
+            { TriggerGameOver(pid); return true; }
         }
+        return false;
     }
 
     private bool CheckWinCondition()
     {
-        for (int pid = 0; pid < 2; pid++)
+        for (int pid = 0; pid < PlayerCount; pid++)
+            if (MissionComplete(pid)) { TriggerGameOver(pid); return true; }
+        return false;
+    }
+
+    private bool MissionComplete(int pid)
+    {
+        Mission m = _playerMissions[pid];
+        if (m == null) return false;
+        switch (m.Type)
         {
-            int opponent = pid == 0 ? 1 : 0;
-
-            bool opponentHasNoTiles = true;
-            foreach (Tile tile in HexGridManager.Instance.Grid.Values)
-            {
-                if (tile.OwnerPlayerId == opponent) { opponentHasNoTiles = false; break; }
-            }
-
-            if (PlayerPrestige[pid] >= 15 || opponentHasNoTiles)
-            {
-                TriggerGameOver(pid);
+            case MissionType.ControlTerritories:
+                int cnt = 0;
+                foreach (Tile t in HexGridManager.Instance.Grid.Values)
+                    if (t.OwnerPlayerId == pid) cnt++;
+                return cnt >= m.TargetCount;
+            case MissionType.DestroyPlayer:
+                return !HasAnyTile(m.TargetPlayer);
+            case MissionType.ControlTwoRegions:
+                if (m.TargetRegions == null) return false;
+                foreach (int r in m.TargetRegions)
+                    if (!PlayerControlsRegion(pid, r)) return false;
                 return true;
-            }
         }
         return false;
     }
@@ -977,12 +705,8 @@ public class GameManager : MonoBehaviour
     {
         CurrentState = GameState.GameOver;
         ClearSelection();
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateUI();
-            UIManager.Instance.ShowGameOver(winnerId);
-        }
+        UIManager.Instance?.UpdateUI();
+        UIManager.Instance?.ShowGameOver(winnerId, _playerMissions[winnerId]);
     }
 
     // -------------------------------------------------------------------------
@@ -991,22 +715,18 @@ public class GameManager : MonoBehaviour
 
     private void ClearHighlights()
     {
-        foreach (Tile tile in _highlightedTiles)
-            if (tile != null) tile.ClearHighlight();
+        foreach (Tile t in _highlightedTiles) if (t != null) t.ClearHighlight();
         _highlightedTiles.Clear();
     }
 
     private void ClearSelection()
     {
-        if (_selectedTile != null)
-        {
-            _selectedTile.SetSelected(false);
-            _selectedTile.UpdateVisuals();
-            _selectedTile = null;
-        }
-        _moveCount         = 0;
-        _yurtMigrationMode = false;
-        _reachableTiles.Clear();
+        if (_selectedTile != null) { _selectedTile.SetSelected(false); _selectedTile.UpdateVisuals(); _selectedTile = null; }
+        _fortifySource = null;
         ClearHighlights();
     }
+
+    public string GetClanName(int pid) => pid >= 0 && pid < PlayerCount ? ClanNames[pid] : "Neutral";
+    public int    GetExtraTroopsLeft(int pid) => _extraTroopsLeft[pid];
+    public Mission GetPlayerMission(int pid) => pid >= 0 && pid < PlayerCount ? _playerMissions[pid] : null;
 }
