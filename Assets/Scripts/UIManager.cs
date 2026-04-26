@@ -522,7 +522,6 @@ public class UIManager : MonoBehaviour
             TerrainType.Plain    => "Plain",
             TerrainType.Mountain => "Mountain",
             TerrainType.Water    => "Water",
-            TerrainType.Pasture  => "Pasture",
             _                    => tile.Terrain.ToString(),
         };
         if (tile.HasForest) terrain += " (Forest)";

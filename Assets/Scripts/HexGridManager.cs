@@ -6,15 +6,21 @@ public class HexGridManager : MonoBehaviour
     public static HexGridManager Instance { get; private set; }
     public System.Action OnGridReady;
 
-    [Header("KayKit Tile Prefabs")]
+    // BASE TILE MESHES — these are the hex floor tiles (must have a Tile component).
+    // Assign: Tile_Grass → plainPrefabs, Tile_Mountain → mountainPrefabs, Tile_Water → waterPrefabs
+    [Header("Tile Base Meshes (hex floor — need Tile component)")]
     [SerializeField] private GameObject[] plainPrefabs;
     [SerializeField] private GameObject[] mountainPrefabs;
     [SerializeField] private GameObject[] waterPrefabs;
-    [SerializeField] private GameObject[] pasturePrefabs;
 
-    [Header("Decoration Prefabs")]
+    // DECORATION MODELS — placed ON TOP of tiles. These are raw FBX models, NOT tile prefabs.
+    // treePrefabs  → only TREE FBX: trees_A_small, trees_A_medium, trees_B_small, trees_B_medium, tree_single_A, tree_single_B
+    // rockPrefabs  → only ROCK FBX: rock_single_A, rock_single_B, rock_single_C, rock_single_D, rock_single_E
+    // hillPrefabs  → only HILL FBX: hills_A, hills_B, hills_C, hill_single_A, hill_single_B, hill_single_C
+    [Header("Decoration Models (placed on tiles — raw FBX, NOT tile prefabs)")]
     [SerializeField] private GameObject[] treePrefabs;
     [SerializeField] private GameObject[] rockPrefabs;
+    [SerializeField] private GameObject[] hillPrefabs;
 
     [Header("Grid Settings")]
     [SerializeField] private int   mapRadius = 4;
@@ -72,7 +78,6 @@ public class HexGridManager : MonoBehaviour
     private static readonly Color FallbackColorPlain    = new Color(0.20f, 0.50f, 0.20f);
     private static readonly Color FallbackColorMountain = new Color(0.50f, 0.50f, 0.50f);
     private static readonly Color FallbackColorWater    = new Color(0.10f, 0.30f, 0.70f);
-    private static readonly Color FallbackColorPasture  = new Color(0.40f, 0.70f, 0.20f);
 
     private void Awake()
     {
@@ -80,7 +85,92 @@ public class HexGridManager : MonoBehaviour
         else { Destroy(gameObject); return; }
     }
 
-    private void Start() => GenerateHexagonalMap();
+    private void Start()
+    {
+        AutoPopulateAssets();
+        LogInspectorSetup();
+        GenerateHexagonalMap();
+    }
+
+    // Automatically loads all KayKit assets so no manual Inspector setup is needed.
+    // Inspector assignments take priority — only fills slots that are still empty.
+    private void AutoPopulateAssets()
+    {
+#if UNITY_EDITOR
+        const string nat  = "Assets/KayKit/fbx(unity)/decoration/nature/";
+        const string pre  = "Assets/Prefabs/";
+
+        if (!HasValidPrefab(plainPrefabs))
+            plainPrefabs = EditorLoadAll(pre + "Tile_Grass.prefab");
+
+        if (!HasValidPrefab(mountainPrefabs))
+            mountainPrefabs = EditorLoadAll(pre + "Tile_Mountain.prefab");
+
+        if (!HasValidPrefab(waterPrefabs))
+            waterPrefabs = EditorLoadAll(pre + "Tile_Water.prefab");
+
+        if (!HasValidPrefab(treePrefabs))
+            treePrefabs = EditorLoadAll(
+                nat + "trees_A_medium.fbx",
+                nat + "trees_A_small.fbx",
+                nat + "trees_A_cut.fbx",
+                nat + "tree_single_A.fbx");
+
+        if (!HasValidPrefab(rockPrefabs))
+            rockPrefabs = EditorLoadAll(
+                nat + "rock_single_A.fbx",
+                nat + "rock_single_B.fbx",
+                nat + "rock_single_C.fbx",
+                nat + "rock_single_D.fbx",
+                nat + "rock_single_E.fbx");
+
+        if (!HasValidPrefab(hillPrefabs))
+            hillPrefabs = EditorLoadAll(
+                nat + "hills_A.fbx",
+                nat + "hills_A_trees.fbx",
+                nat + "hills_B.fbx",
+                nat + "hills_B_trees.fbx",
+                nat + "hills_C.fbx",
+                nat + "hills_C_trees.fbx");
+#endif
+    }
+
+#if UNITY_EDITOR
+    private static GameObject[] EditorLoadAll(params string[] paths)
+    {
+        var list = new System.Collections.Generic.List<GameObject>();
+        foreach (string p in paths)
+        {
+            var go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
+            if (go != null) list.Add(go);
+            else Debug.LogWarning($"[HexGridManager] Asset not found: {p}");
+        }
+        return list.ToArray();
+    }
+#endif
+
+    // Prints every Inspector array to the Console so you can verify what's assigned.
+    [ContextMenu("Log Inspector Setup")]
+    private void LogInspectorSetup()
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.AppendLine("[HexGridManager] Inspector array contents:");
+        AppendArray(sb, "plainPrefabs    (BASE tile mesh — flat hex, e.g. Tile_Grass)",    plainPrefabs);
+        AppendArray(sb, "mountainPrefabs (BASE tile mesh — e.g. Tile_Mountain)",           mountainPrefabs);
+        AppendArray(sb, "waterPrefabs    (BASE tile mesh — e.g. Tile_Water)",              waterPrefabs);
+        AppendArray(sb, "treePrefabs     (DECO on plain tiles — ONLY tree FBX, e.g. tree_single_A)", treePrefabs);
+        AppendArray(sb, "rockPrefabs     (DECO scatter — ONLY rock FBX, e.g. rock_single_A)", rockPrefabs);
+        AppendArray(sb, "hillPrefabs     (DECO on mountain tiles — ONLY hill FBX, e.g. hills_A)", hillPrefabs);
+        Debug.Log(sb.ToString());
+    }
+
+    private static void AppendArray(System.Text.StringBuilder sb, string label, GameObject[] arr)
+    {
+        if (arr == null || arr.Length == 0) { sb.AppendLine($"  {label}: EMPTY"); return; }
+        sb.AppendLine($"  {label}: {arr.Length} slot(s)");
+        for (int i = 0; i < arr.Length; i++)
+            sb.AppendLine($"    [{i}] {(arr[i] == null ? "<null>" : arr[i].name)}");
+    }
 
     private void GenerateHexagonalMap()
     {
@@ -181,11 +271,12 @@ public class HexGridManager : MonoBehaviour
             switch (tile.Terrain)
             {
                 case TerrainType.Plain:
-                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.28f; break;
-                case TerrainType.Pasture:
-                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 2; spawnChance = 0.38f; break;
+                    primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.32f; break;
                 case TerrainType.Mountain:
-                    primaryPool = rockPrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.45f; break;
+                    // Prefer hill variants; fall back to rocks if hillPrefabs not assigned
+                    primaryPool   = HasValidPrefab(hillPrefabs) ? hillPrefabs : rockPrefabs;
+                    secondaryPool = rockPrefabs;
+                    maxCount = 2; spawnChance = 0.85f; break;
                 case TerrainType.Water:
                     continue;
             }
@@ -205,7 +296,7 @@ public class HexGridManager : MonoBehaviour
             if (tilePool == null || tilePool.Length == 0) continue;
 
             bool isForest = treePrefabs != null && treePrefabs.Length > 0 && tilePool == treePrefabs
-                         && (tile.Terrain == TerrainType.Plain || tile.Terrain == TerrainType.Pasture);
+                         && tile.Terrain == TerrainType.Plain;
             if (isForest) tile.SetHasForest(true);
 
             for (int i = 0; i < count; i++)
@@ -328,29 +419,24 @@ public class HexGridManager : MonoBehaviour
         int   dist = HexDistanceFromOrigin(q, r);
         float roll = Random.value;
 
-        if (dist <= 2)
-            return roll < 0.60f ? TerrainType.Plain : TerrainType.Pasture;
+        if (dist <= 2) return TerrainType.Plain;
 
         if (dist == 3)
         {
-            if (roll < 0.55f) return TerrainType.Plain;
-            if (roll < 0.75f) return TerrainType.Pasture;
+            if (roll < 0.72f) return TerrainType.Plain;
             if (roll < 0.88f) return TerrainType.Mountain;
             return TerrainType.Water;
         }
 
         // dist 4 — outermost ring
-        if (roll < 0.40f) return TerrainType.Plain;
-        if (roll < 0.58f) return TerrainType.Pasture;
-        if (roll < 0.78f) return TerrainType.Mountain;
+        if (roll < 0.50f) return TerrainType.Plain;
+        if (roll < 0.75f) return TerrainType.Mountain;
         return TerrainType.Water;
     }
 
     private TerrainType RemapTerrainToAvailable(TerrainType terrain)
     {
-        if (terrain == TerrainType.Mountain && !HasValidPrefab(mountainPrefabs)) return TerrainType.Plain;
-        if (terrain == TerrainType.Water    && !HasValidPrefab(waterPrefabs))    return TerrainType.Plain;
-        if (terrain == TerrainType.Pasture  && !HasValidPrefab(pasturePrefabs))  return TerrainType.Plain;
+        // Mountain and Water fall through to CreateFallbackTile so they always look distinct.
         return terrain;
     }
 
@@ -368,9 +454,12 @@ public class HexGridManager : MonoBehaviour
             TerrainType.Plain    => plainPrefabs,
             TerrainType.Mountain => mountainPrefabs,
             TerrainType.Water    => waterPrefabs,
-            TerrainType.Pasture  => pasturePrefabs,
             _                    => plainPrefabs,
         };
+        // Mountain and Water must look visually distinct — never fall back to plain prefab.
+        // Return null so GenerateHexagonalMap uses CreateFallbackTile instead.
+        if (terrain == TerrainType.Mountain || terrain == TerrainType.Water)
+            return PickValid(raw);
         return PickValid(raw) ?? PickValid(plainPrefabs);
     }
 
@@ -420,31 +509,55 @@ public class HexGridManager : MonoBehaviour
         root.transform.position = worldPos;
         root.transform.SetParent(transform, true);
 
+        float disc    = hexSize * 0.95f;
+        bool  isMtn   = terrain == TerrainType.Mountain;
+        bool  isWater = terrain == TerrainType.Water;
+
+        // Base hex disc
         GameObject cyl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         cyl.transform.SetParent(root.transform, false);
         cyl.transform.localPosition = Vector3.zero;
-        float disc = hexSize * 0.95f;
-        cyl.transform.localScale = new Vector3(disc, 0.12f, disc);
+        cyl.transform.localScale = new Vector3(disc, isMtn ? 0.55f : (isWater ? 0.05f : 0.12f), disc);
         Destroy(cyl.GetComponent<Collider>());
 
         Renderer rend = cyl.GetComponent<Renderer>();
+        Color tileColor = terrain switch
+        {
+            TerrainType.Mountain => FallbackColorMountain,
+            TerrainType.Water    => FallbackColorWater,
+            _                    => FallbackColorPlain,
+        };
         if (rend != null)
         {
             Material mat = new Material(rend.sharedMaterial);
-            Color c = terrain switch
-            {
-                TerrainType.Mountain => FallbackColorMountain,
-                TerrainType.Water    => FallbackColorWater,
-                TerrainType.Pasture  => FallbackColorPasture,
-                _                    => FallbackColorPlain,
-            };
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
-            if (mat.HasProperty("_Color"))     mat.SetColor("_Color",     c);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tileColor);
+            if (mat.HasProperty("_Color"))     mat.SetColor("_Color",     tileColor);
             rend.material = mat;
         }
 
+        // Peak cone on top of mountain fallback so it reads clearly
+        if (isMtn)
+        {
+            GameObject cone = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            cone.transform.SetParent(root.transform, false);
+            cone.transform.localPosition = new Vector3(0f, 0.70f, 0f);
+            cone.transform.localScale    = new Vector3(disc * 0.55f, 0.40f, disc * 0.55f);
+            Destroy(cone.GetComponent<Collider>());
+            Renderer cr = cone.GetComponent<Renderer>();
+            if (cr != null)
+            {
+                Material m = new Material(cr.sharedMaterial);
+                Color snow = new Color(0.82f, 0.82f, 0.82f);
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", snow);
+                if (m.HasProperty("_Color"))     m.SetColor("_Color",     snow);
+                cr.material = m;
+            }
+        }
+
+        float colHeight = isMtn ? 1.6f : 0.6f;
+        float colCenter = isMtn ? 0.50f : 0.15f;
         CapsuleCollider col = root.AddComponent<CapsuleCollider>();
-        col.radius = hexSize * 0.9f; col.height = 0.6f; col.center = new Vector3(0f, 0.15f, 0f);
+        col.radius = hexSize * 0.9f; col.height = colHeight; col.center = new Vector3(0f, colCenter, 0f);
 
         Tile tile = root.AddComponent<Tile>();
         tile.SetPrimitiveMeshRenderer(rend);

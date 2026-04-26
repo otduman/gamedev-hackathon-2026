@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 
-public enum TerrainType { Plain, Mountain, Water, Pasture }
+public enum TerrainType { Plain, Mountain, Water }
 
 public class Tile : MonoBehaviour
 {
