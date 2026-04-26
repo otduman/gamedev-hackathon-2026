@@ -6,21 +6,27 @@ public class HexGridManager : MonoBehaviour
     public static HexGridManager Instance { get; private set; }
     public System.Action OnGridReady;
 
-    // BASE TILE MESHES — these are the hex floor tiles (must have a Tile component).
-    // Assign: Tile_Grass → plainPrefabs, Tile_Mountain → mountainPrefabs, Tile_Water → waterPrefabs
+    // BASE TILE MESHES — hex floor tiles, must have a Tile component.
     [Header("Tile Base Meshes (hex floor — need Tile component)")]
     [SerializeField] private GameObject[] plainPrefabs;
     [SerializeField] private GameObject[] mountainPrefabs;
     [SerializeField] private GameObject[] waterPrefabs;
 
-    // DECORATION MODELS — placed ON TOP of tiles. These are raw FBX models, NOT tile prefabs.
-    // treePrefabs  → only TREE FBX: trees_A_small, trees_A_medium, trees_B_small, trees_B_medium, tree_single_A, tree_single_B
-    // rockPrefabs  → only ROCK FBX: rock_single_A, rock_single_B, rock_single_C, rock_single_D, rock_single_E
-    // hillPrefabs  → only HILL FBX: hills_A, hills_B, hills_C, hill_single_A, hill_single_B, hill_single_C
-    [Header("Decoration Models (placed on tiles — raw FBX, NOT tile prefabs)")]
+    // Trees placed on plain tiles to create forests.
+    [Header("Forest Decorations (plain tiles)")]
     [SerializeField] private GameObject[] treePrefabs;
+
+    // Small rocks scattered on plain tiles.
+    [Header("Rock Decorations (plain tiles)")]
     [SerializeField] private GameObject[] rockPrefabs;
+
+    // Hills placed on mountain-terrain tiles (inner mountains).
+    [Header("Hill Decorations (mountain tiles)")]
     [SerializeField] private GameObject[] hillPrefabs;
+
+    // Large mountain FBX models for the outer border ring.
+    [Header("Mountain Border Decorations (outer ring)")]
+    [SerializeField] private GameObject[] mountainDecoPrefabs;
 
     [Header("Grid Settings")]
     [SerializeField] private int   mapRadius = 4;
@@ -83,6 +89,7 @@ public class HexGridManager : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
+        EnsureEventSystem();
     }
 
     private void Start()
@@ -90,6 +97,19 @@ public class HexGridManager : MonoBehaviour
         AutoPopulateAssets();
         LogInspectorSetup();
         GenerateHexagonalMap();
+    }
+
+    // Guarantees an EventSystem exists regardless of scene setup.
+    private static void EnsureEventSystem()
+    {
+        if (UnityEngine.EventSystems.EventSystem.current != null) return;
+        GameObject esGo = new GameObject("EventSystem");
+        DontDestroyOnLoad(esGo);
+        esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
+        System.Type nisType = System.Type.GetType(
+            "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
+        if (nisType != null) esGo.AddComponent(nisType);
+        else esGo.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
     }
 
     // Automatically loads all KayKit assets so no manual Inspector setup is needed.
@@ -132,6 +152,18 @@ public class HexGridManager : MonoBehaviour
                 nat + "hills_B_trees.fbx",
                 nat + "hills_C.fbx",
                 nat + "hills_C_trees.fbx");
+
+        if (!HasValidPrefab(mountainDecoPrefabs))
+            mountainDecoPrefabs = EditorLoadAll(
+                nat + "mountain_A.fbx",
+                nat + "mountain_A_grass.fbx",
+                nat + "mountain_A_grass_trees.fbx",
+                nat + "mountain_B.fbx",
+                nat + "mountain_B_grass.fbx",
+                nat + "mountain_B_grass_trees.fbx",
+                nat + "mountain_C.fbx",
+                nat + "mountain_C_grass.fbx",
+                nat + "mountain_C_grass_trees.fbx");
 #endif
     }
 
@@ -158,9 +190,10 @@ public class HexGridManager : MonoBehaviour
         AppendArray(sb, "plainPrefabs    (BASE tile mesh — flat hex, e.g. Tile_Grass)",    plainPrefabs);
         AppendArray(sb, "mountainPrefabs (BASE tile mesh — e.g. Tile_Mountain)",           mountainPrefabs);
         AppendArray(sb, "waterPrefabs    (BASE tile mesh — e.g. Tile_Water)",              waterPrefabs);
-        AppendArray(sb, "treePrefabs     (DECO on plain tiles — ONLY tree FBX, e.g. tree_single_A)", treePrefabs);
-        AppendArray(sb, "rockPrefabs     (DECO scatter — ONLY rock FBX, e.g. rock_single_A)", rockPrefabs);
-        AppendArray(sb, "hillPrefabs     (DECO on mountain tiles — ONLY hill FBX, e.g. hills_A)", hillPrefabs);
+        AppendArray(sb, "treePrefabs          (forest deco on plains)", treePrefabs);
+        AppendArray(sb, "rockPrefabs          (rock scatter on plains)", rockPrefabs);
+        AppendArray(sb, "hillPrefabs          (hill deco on inner mountains)", hillPrefabs);
+        AppendArray(sb, "mountainDecoPrefabs  (large mountain FBX on outer border ring)", mountainDecoPrefabs);
         Debug.Log(sb.ToString());
     }
 
@@ -273,10 +306,22 @@ public class HexGridManager : MonoBehaviour
                 case TerrainType.Plain:
                     primaryPool = treePrefabs; secondaryPool = rockPrefabs; maxCount = 1; spawnChance = 0.32f; break;
                 case TerrainType.Mountain:
-                    // Prefer hill variants; fall back to rocks if hillPrefabs not assigned
-                    primaryPool   = HasValidPrefab(hillPrefabs) ? hillPrefabs : rockPrefabs;
-                    secondaryPool = rockPrefabs;
-                    maxCount = 2; spawnChance = 0.85f; break;
+                    int dist = HexDistanceFromOrigin(tile.HexCoordinates.x, tile.HexCoordinates.y);
+                    if (dist >= mapRadius)
+                    {
+                        // Outer border ring — use large mountain FBX models
+                        primaryPool   = HasValidPrefab(mountainDecoPrefabs) ? mountainDecoPrefabs : hillPrefabs;
+                        secondaryPool = hillPrefabs;
+                        maxCount = 1; spawnChance = 1.0f;
+                    }
+                    else
+                    {
+                        // Inner mountain tiles — use hill variants
+                        primaryPool   = HasValidPrefab(hillPrefabs) ? hillPrefabs : rockPrefabs;
+                        secondaryPool = rockPrefabs;
+                        maxCount = 2; spawnChance = 0.85f;
+                    }
+                    break;
                 case TerrainType.Water:
                     continue;
             }
@@ -428,10 +473,8 @@ public class HexGridManager : MonoBehaviour
             return TerrainType.Water;
         }
 
-        // dist 4 — outermost ring
-        if (roll < 0.50f) return TerrainType.Plain;
-        if (roll < 0.75f) return TerrainType.Mountain;
-        return TerrainType.Water;
+        // Outer ring is always Mountain — creates a natural border range.
+        return TerrainType.Mountain;
     }
 
     private TerrainType RemapTerrainToAvailable(TerrainType terrain)
