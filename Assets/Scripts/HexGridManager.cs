@@ -732,12 +732,8 @@ public class HexGridManager : MonoBehaviour
 
     private void CreateBackgroundPlane()
     {
-        string path = Application.dataPath + "/background-image.jpg";
-        if (!System.IO.File.Exists(path)) { Debug.LogWarning("[HexGridManager] background-image.jpg not found."); return; }
-
-        byte[] bytes = System.IO.File.ReadAllBytes(path);
-        Texture2D tex = new Texture2D(2, 2);
-        if (!tex.LoadImage(bytes)) { Debug.LogWarning("[HexGridManager] Failed to decode background-image.jpg"); return; }
+        Texture2D tex = Resources.Load<Texture2D>("background-image");
+        if (tex == null) { Debug.LogWarning("[HexGridManager] background-image not found in Resources."); return; }
 
         GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Quad);
         plane.name = "BackgroundPlane";
